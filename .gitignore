@@ -1,0 +1,48 @@
+#settings
+.settings/
+
+#Debug
+Debug/
+
+# Prerequisites
+*.d
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output
+# This guy recommends keeping it:
+# https://community.st.com/stm32cubeide-mcus-28/standard-gitignore-project-setup-for-sharing-stm32cube-projects-with-github-126038
+# *.ilk
+# *.map
+# *.exp
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.bin
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
