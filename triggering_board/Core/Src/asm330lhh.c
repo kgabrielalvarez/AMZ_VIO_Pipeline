@@ -1,169 +1,146 @@
 #include "asm330lhh.h"
 
-// Declare variables private to asm330lhh.c
-static uint8_t write_buffer[BUFFER_SIZE];
-static uint8_t read_buffer[BUFFER_SIZE];
-static uint8_t FIFO_CTRL3;
-static uint8_t CTRL1_XL;
-static uint8_t CTRL2_G;
-
-int write_byte(uint8_t address, uint8_t data) {
+imu_spi_state_t write_imu_byte(uint8_t address, uint8_t data) {
+	imu_spi_state_t state = IMU_SPI_OK;
     // STEP 1: Write Byte
-    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET) != HAL_OK) {
-        return 1;
-    }
+    HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
     write_buffer[0] = address;
     write_buffer[1] = data;
     if (HAL_SPI_Transmit(&hspi2, write_buffer, 2, TIMEOUT) != HAL_OK) {
-        return 1;
+    	state = TRANSMITTING_W_ADDR;
+        return state;
     }
-    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET) != HAL_OK) {
-        return 1;
-    }
+    HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
     // STEP 2: Check that Byte was properly written
-    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET) != HAL_OK) {
-        return 1;
-    }
+    HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
     write_buffer[0] = 0x80 | address;
     if (HAL_SPI_Transmit(&hspi2, write_buffer, 1, TIMEOUT) != HAL_OK) {
-        return 1;
+    	state = TRANSMITTING_R_ADDR;
+        return state;
     }
     if (HAL_SPI_Receive(&hspi2, read_buffer, 1, TIMEOUT) != HAL_OK) {
-        return 1;
-    }
-    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET) != HAL_OK) {
-        return 1;
+    	state = RECEIVING_BYTE;
+        return state;
     }
     if (read_buffer[0] != data) {
-        return 1;
+    	state = WRITTEN_BYTE_DOESNT_MATCH;
+    	return state;
     }
-    return 0;
+    HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+    return state;
 }
 
-int configure_imu_den() {
-    if (write_byte(CTRL6_C_ADDR, CTRL6_C_DEN) != 0) {
-        return 1;
+imu_status_t configure_imu(int32_t frequency, bool den_enabled) {
+	imu_status_t status;
+	status.state = IMU_OK;
+	// STEP 1: Enable/Disable DEN and configure DRDY
+    uint8_t CTRL6_C;
+    uint8_t CTRL9_XL;
+    uint8_t INT1_CTRL;
+    if (den_enabled) {
+        CTRL6_C = CTRL6_C_DEN;
+        CTRL9_XL = CTRL9_XL_DEN;
+        INT1_CTRL = INT1_CTRL_DEN;
     }
-    if (write_byte(CTRL9_XL_ADDR, CTRL9_XL_DEN) != 0) {
-        return 1;
+    else {
+        CTRL6_C = CTRL6_C_STANDARD;
+        CTRL9_XL = CTRL9_XL_STANDARD;
+        INT1_CTRL = INT1_CTRL_STANDARD;
     }
-    if (write_byte(INT1_CTRL_ADDR, INT1_CTRL_DEN) != 0) {
-        return 1;
+    status.spi_state = write_imu_byte(CTRL6_C_ADDR, CTRL6_C);
+    if (status.spi_state != IMU_SPI_OK) {
+    	status.state = ERROR_WRITING_CTRL6_C;
+        return status;
     }
-    return 0;
+    status.spi_state = write_imu_byte(CTRL9_XL_ADDR, CTRL9_XL);
+    if (status.spi_state != IMU_SPI_OK) {
+    	status.state = ERROR_WRITING_CTRL9_XL;
+        return status;
+    }
+    status.spi_state = write_imu_byte(INT1_CTRL_ADDR, INT1_CTRL);
+    if (status.spi_state != IMU_SPI_OK) {
+    	status.state = ERROR_WRITING_INT1_CTRL;
+        return status;
+    }
+    // STEP 2: Set operating frequency
+    status.state = set_imu_frequency(frequency);
+    if (status.state != IMU_OK) {
+        return status;
+    }
+    // STEP 3: Disable FIFO
+    status.spi_state = write_imu_byte(FIFO_CTRL4_ADDR, FIFO_CTRL4);
+    if (status.spi_state != IMU_SPI_OK) {
+        status.state = ERROR_WRITING_FIFO_CTRL4;
+    	return status;
+    }
+    // STEP 4: Configure Accelerometer
+    status.spi_state = write_imu_byte(CTRL1_XL_ADDR, CTRL1_XL);
+    if (status.spi_state != IMU_SPI_OK) {
+        status.state = ERROR_WRITING_CTRL1_XL;
+    	return status;
+    }
+    status.spi_state = write_imu_byte(CTRL8_XL_ADDR, CTRL8_XL);
+    if (status.spi_state != IMU_SPI_OK) {
+        status.state = ERROR_WRITING_CTRL8_XL;
+    	return status;
+    }
+    // STEP 5: Configure Gyroscope
+    status.spi_state = write_imu_byte(CTRL2_G_ADDR, CTRL2_G);
+    if (status.spi_state != IMU_SPI_OK) {
+        status.state = ERROR_WRITING_CTRL2_G;
+    	return status;
+    }
+    status.spi_state = write_imu_byte(CTRL7_G_ADDR, CTRL7_G);
+    if (status.spi_state != IMU_SPI_OK) {
+        status.state = ERROR_WRITING_CTRL7_G;
+    	return status;
+    }
+    return status;
 }
 
-int configure_imu_standard() {
-    if (write_byte(CTRL6_C_ADDR, CTRL6_C_STANDARD) != 0) {
-        return 1;
-    }
-    if (write_byte(CTRL9_XL_ADDR, CTRL9_XL_STANDARD) != 0) {
-        return 1;
-    }
-    if (write_byte(INT1_CTRL_ADDR, INT1_CTRL_STANDARD) != 0) {
-        return 1;
-    }
-    return 0;
-}
-
-int set_frequency(int32_t frequency) {
+imu_state_t set_imu_frequency(int32_t frequency) {
+	imu_state_t state = IMU_OK;
     switch (frequency) {
         case 833:
-            FIFO_CTRL3 = FIFO_CTRL3_833;
             CTRL1_XL = CTRL1_XL_833;
             CTRL2_G = CTRL2_G_833;
-            return 0;
+            return state;
         case 1667:
-            FIFO_CTRL3 = FIFO_CTRL3_1667;
             CTRL1_XL = CTRL1_XL_1667;
             CTRL2_G = CTRL2_G_1667;
-            return 0;
+            return state;
         case 3333:
-            FIFO_CTRL3 = FIFO_CTRL3_3333;
             CTRL1_XL = CTRL1_XL_3333;
             CTRL2_G = CTRL2_G_3333;
-            return 0;
+            return state;
         case 6667:
-            FIFO_CTRL3 = FIFO_CTRL3_3333;
             CTRL1_XL = CTRL1_XL_6667;
             CTRL2_G = CTRL2_G_6667;
-            return 0;
+            return state;
         default:
-            return 1;
+        	state = ERROR_SETTING_FREQUENCY;
+            return state;
     }
 }
 
-int disable_fifo() {
-    if (write_byte(FIFO_CTRL4_ADDR, FIFO_CTRL4) != 0) {
-        return 1;
-    }
-    return 0;
-}
-
-int configure_accel() {
-    if (write_byte(CTRL1_XL_ADDR, CTRL1_XL) != 0) {
-        return 1;
-    }
-    if (write_byte(CTRL8_XL_ADDR, CTRL8_XL) != 0) {
-        return 1;
-    }
-    return 0;
-}
-
-int configure_gyro() {
-    if (write_byte(CTRL2_G_ADDR, CTRL2_G) != 0) {
-        return 1;
-    }
-    if (write_byte(CTRL7_G_ADDR, CTRL7_G) != 0) {
-        return 1;
-    }
-    return 0;
-}
-
-int read_single_measurement(uint8_t address, int16_t *measurement, bool check_den_stamp) {
-    // STEP 1: Read MSB and LSB bytes
-    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET) != HAL_OK) {
-        return 1;
-    }
-    write_buffer[0] = address | 0x80;
-    if (HAL_SPI_Transmit(&hspi2, write_buffer, 1, TIMEOUT) != HAL_OK) {
-        return 1;
-    }
-    if (HAL_SPI_Receive(&hspi2, read_buffer, 2, TIMEOUT) != HAL_OK) {
-        return 1;
-    }
-    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET) != HAL_OK) {
-        return 1;
-    }
-    // STEP 2: Check den bit
-    if (check_den_stamp) {
-        if (read_buffer[0] & 0x01 != 0x01) {
-            return 1;
-        }
-    }
-    // STEP 3: Convert measurement to decimal
-    // Source: https://stackoverflow.com/questions/3180777/join-msb-and-lsb-of-a-16-bit-signed-integer-twos-complement
-    uint16_t raw_data = ((uint16_t) read_buffer[1] << 8) | ((uint16_t) read_buffer[0]);
-    int16_t data = (int16_t) raw_data;
-    *measurement = data;
-    return 0;
-}
-
-int check_if_measurements_ready(bool *measurements_ready) {
+imu_status_t check_if_imu_measurements_ready(bool *measurements_ready) {
+	imu_status_t status;
+	status.state = IMU_OK;
+	status.spi_state = IMU_SPI_OK;
     // STEP 1: Read STATUS_REG
-    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET) != HAL_OK) {
-        return 1;
-    }
+    HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
     write_buffer[0] = STATUS_REG_ADDR | 0x80;
     if (HAL_SPI_Transmit(&hspi2, write_buffer, 1, TIMEOUT) != HAL_OK) {
-        return 1;
+    	status.state = ERROR_CHECKING_IF_MEASUREMENTS_READY;
+    	status.spi_state = TRANSMITTING_R_ADDR;
+        return status;
     }
     if (HAL_SPI_Receive(&hspi2, read_buffer, 1, TIMEOUT) != HAL_OK) {
-        return 1;
+    	status.state = ERROR_CHECKING_IF_MEASUREMENTS_READY;
+    	status.spi_state = RECEIVING_BYTE;
+        return status;
     }
-    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET) != HAL_OK) {
-        return 1;
-    }
+    HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
     // STEP 2: Check if both the accelerometer and gyroscope measurements are ready
     if ((read_buffer[0] & STATUS_REG_MASK) == STATUS_REG_MASK) {
         *measurements_ready = true;
@@ -171,31 +148,74 @@ int check_if_measurements_ready(bool *measurements_ready) {
     else {
         *measurements_ready = false;
     }
-    return 0;
+    return status;
 }
 
-int read_measurements(int16_t *x_accel, int16_t *y_accel, int16_t *z_accel,
-                      int16_t *x_gyro, int16_t *y_gyro, int16_t *z_gyro,
-                      bool den_enabled) {
-    // STEP 1: Read accelerometer measurements
-    if (read_single_measurement(OUTX_L_A_ADDR, x_accel, false) != 0) {
-        return 1;
+imu_spi_state_t read_single_imu_measurement(uint8_t address, int16_t *measurement, bool check_den_stamp) {
+	imu_spi_state_t state = IMU_SPI_OK;
+    // STEP 1: Read MSB and LSB bytes
+    HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+    write_buffer[0] = address | 0x80;
+    if (HAL_SPI_Transmit(&hspi2, write_buffer, 1, TIMEOUT) != HAL_OK) {
+    	state = TRANSMITTING_R_ADDR;
+        return state;
     }
-    if (read_single_measurement(OUTY_L_A_ADDR, y_accel, false) != 0) {
-        return 1;
+    if (HAL_SPI_Receive(&hspi2, read_buffer, 2, TIMEOUT) != HAL_OK) {
+    	state = RECEIVING_BYTE;
+        return state;
     }
-    if (read_single_measurement(OUTZ_L_A_ADDR, z_accel, den_enabled) != 0) {
-        return 1;
+    HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+    // STEP 2: Check den bit
+    if (check_den_stamp) {
+        if ((read_buffer[0] & 0x01) != 0x01) {
+        	state = DEN_STAMP_MISSING;
+            return state;
+        }
+    }
+    // STEP 3: Convert measurement to decimal
+    // Source: https://stackoverflow.com/questions/3180777/join-msb-and-lsb-of-a-16-bit-signed-integer-twos-complement
+    uint16_t raw_data = ((uint16_t) read_buffer[1] << 8) | ((uint16_t) read_buffer[0]);
+    int16_t data = (int16_t) raw_data;
+    *measurement = data;
+    return state;
+}
+
+imu_status_t read_imu_measurements(int16_t *x_accel, int16_t *y_accel, int16_t *z_accel,
+								   int16_t *x_gyro, int16_t *y_gyro, int16_t *z_gyro,
+								   bool den_enabled) {
+	imu_status_t status;
+	status.state = IMU_OK;
+	// STEP 1: Read accelerometer measurements
+	status.spi_state = read_single_imu_measurement(OUTX_L_A_ADDR, x_accel, false);
+    if (status.spi_state != IMU_SPI_OK) {
+    	status.state = ERROR_READING_X_ACCEL;
+        return status;
+    }
+    status.spi_state = read_single_imu_measurement(OUTY_L_A_ADDR, y_accel, false);
+    if (status.spi_state != IMU_SPI_OK) {
+    	status.state = ERROR_READING_Y_ACCEL;
+        return status;
+    }
+    status.spi_state = read_single_imu_measurement(OUTZ_L_A_ADDR, z_accel, den_enabled);
+    if (status.spi_state != IMU_SPI_OK) {
+        status.state = ERROR_READING_Z_ACCEL;
+    	return status;
     }
     // STEP 2: Read gyroscope measurements
-    if (read_single_measurement(OUTX_L_G_ADDR, x_gyro, false) != 0) {
-        return 1;
+    status.spi_state = read_single_imu_measurement(OUTX_L_G_ADDR, x_gyro, false);
+    if (status.spi_state != IMU_SPI_OK) {
+        status.state = ERROR_READING_X_GYRO;
+    	return status;
     }
-    if (read_single_measurement(OUTY_L_G_ADDR, y_gyro, false) != 0) {
-        return 1;
+    status.spi_state = read_single_imu_measurement(OUTY_L_G_ADDR, y_gyro, false);
+    if (status.spi_state != IMU_SPI_OK) {
+        status.state = ERROR_READING_Y_GYRO;
+    	return status;
     }
-    if (read_single_measurement(OUTZ_L_G_ADDR, z_gyro, false) != 0) {
-        return 1;
+    status.spi_state = read_single_imu_measurement(OUTZ_L_G_ADDR, z_gyro, false);
+    if (status.spi_state != IMU_SPI_OK) {
+    	status.state = ERROR_READING_Z_GYRO;
+        return status;
     }
-    return 0;
+    return status;
 }

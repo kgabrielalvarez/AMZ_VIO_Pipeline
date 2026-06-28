@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "asm330lhh.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -65,7 +65,34 @@ static void MX_USB_PCD_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-	uint8_t buffer[19];
+// Miscellaneous variables
+uint8_t buffer[19];
+
+// IMU variables
+int16_t x_accel;
+int16_t y_accel;
+int16_t z_accel;
+int16_t x_gyro;
+int16_t y_gyro;
+int16_t z_gyro;
+int32_t imu_frequency = 833; // [HZ]
+bool den_enabled = false;
+imu_status_t imu_status;
+
+// IMU interrupt callback
+__weak void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+
+	if (GPIO_Pin == IMU_INT_Pin) {
+
+		bool measurement_ready = false;
+		imu_status = check_if_imu_measurements_ready(&measurement_ready);
+		if (measurement_ready) {
+			imu_status = read_imu_measurements(&x_accel, &y_accel, &z_accel, &x_gyro, &y_gyro, &z_gyro, den_enabled);
+		}
+
+	}
+
+}
 
 /* USER CODE END 0 */
 
@@ -103,6 +130,9 @@ int main(void)
   MX_SPI2_Init();
   MX_USB_PCD_Init();
   /* USER CODE BEGIN 2 */
+
+  // Configure IMU
+  imu_status = configure_imu(imu_frequency, den_enabled);
 
   /* USER CODE END 2 */
 
@@ -374,11 +404,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(EXP_ACT_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : IMU_INT_Pin VSENSE_Pin */
-  GPIO_InitStruct.Pin = IMU_INT_Pin|VSENSE_Pin;
+  /*Configure GPIO pin : IMU_INT_Pin */
+  GPIO_InitStruct.Pin = IMU_INT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(IMU_INT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : VSENSE_Pin */
+  GPIO_InitStruct.Pin = VSENSE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(VSENSE_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : DEBUG_LED_Pin */
   GPIO_InitStruct.Pin = DEBUG_LED_Pin;
@@ -386,6 +422,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(DEBUG_LED_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
