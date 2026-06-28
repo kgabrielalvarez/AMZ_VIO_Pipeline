@@ -5,23 +5,29 @@
 #include "main.h"
 
 // Define addresses and registers
-// DEN (Data Enable) Configuration: Edge-sensitive trigger mode
+// DEN (Data Enable) Configuration: Level-sensitive latched mode
 #define CTRL6_C_ADDR            0x15
-#define CTRL6_C_DEN             0x80
+#define CTRL6_C_DEN             0x60
+#define CTRL6_C_STANDARD        0x00
 #define CTRL9_XL_ADDR           0x18
-#define CTRL9_XL_DEN            0x0A
+#define CTRL9_XL_DEN            0x3A
+#define CTRL9_XL_STANDARD       0x02
+// DRDY (Data Ready) Configuration
+#define INT1_CTRL_ADDR          0x0D
+#define INT1_CTRL_DEN           0x80
+#define INT1_CTRL_STANDARD      0x03
 // FIFO Configuration
-#define FIFO_CTRL1_ADDR         0x07
-#define FIFO_CTRL1              0x00
-#define FIFO_CTRL2_ADDR         0x08
-#define FIFO_CTRL2              0x00
-#define FIFO_CTRL3_ADDR         0x09
-#define FIFO_CTRL3_833          0x77 // 833 Hz
-#define FIFO_CTRL3_1667         0x88 // 1667 Hz
-#define FIFO_CTRL3_3333         0x99 // 3333 Hz
-#define FIFO_CTRL3_6667         0xAA // 6667 Hz
+// #define FIFO_CTRL1_ADDR         0x07
+// #define FIFO_CTRL1              0x00
+// #define FIFO_CTRL2_ADDR         0x08
+// #define FIFO_CTRL2              0x00
+// #define FIFO_CTRL3_ADDR         0x09
+// #define FIFO_CTRL3_833          0x77 // 833 Hz
+// #define FIFO_CTRL3_1667         0x88 // 1667 Hz
+// #define FIFO_CTRL3_3333         0x99 // 3333 Hz
+// #define FIFO_CTRL3_6667         0xAA // 6667 Hz
 #define FIFO_CTRL4_ADDR         0x0A
-#define FIFO_CTRL4              0x06
+#define FIFO_CTRL4              0x00
 // Accelerometer configuration
 #define CTRL1_XL_ADDR           0x10
 #define CTRL1_XL_833            0x78 // 833 Hz, +/- 4 g, output from LPF1
@@ -38,6 +44,20 @@
 #define CTRL2_G_6667            0xA4 // 6667 Hz, +/- 500 dps
 #define CTRL7_G_ADDR            0x16
 #define CTRL7_G                 0x00
+// Accelerometer Measurement Registers
+#define OUTX_H_A_ADDR           0x29
+#define OUTX_L_A_ADDR           0x28
+#define OUTY_H_A_ADDR           0x2B
+#define OUTY_L_A_ADDR           0x2A
+#define OUTZ_H_A_ADDR           0x2D
+#define OUTZ_L_A_ADDR           0x2C
+// Gyroscope Measurement Registers
+#define OUTX_H_G_ADDR           0x23
+#define OUTX_L_G_ADDR           0x22
+#define OUTY_H_G_ADDR           0x25
+#define OUTY_L_G_ADDR           0x24
+#define OUTZ_H_G_ADDR           0x27
+#define OUTZ_L_G_ADDR           0x26
 
 // Define variables
 #define BUFFER_SIZE 8
@@ -46,20 +66,22 @@
 // Define functions
 int write_byte(uint8_t address, uint8_t data);
 
-int configure_den();
+int configure_imu_den();
+
+int configure_imu_standard();
 
 int set_frequency(int32_t frequency);
 
-int configure_fifo();
+int disable_fifo();
 
 int configure_accel();
 
 int configure_gyro();
 
-int read_from_registers();
+int read_single_measurement(uint8_t address, int32_t *measurement, bool check_den_stamp);
 
-int read_from_fifo();
+int read_measurements_den();
 
-int check_imu_alive();
+int read_measurements_standard();
 
 #endif

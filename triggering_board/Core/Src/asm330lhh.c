@@ -40,20 +40,17 @@ int write_byte(uint8_t address, uint8_t data) {
     return 0;
 }
 
-int configure_den() {
+int configure_imu_den() {
     if (write_byte(CTRL6_C_ADDR, CTRL6_C_DEN) != 0) {
         return 1;
     }
     if (write_byte(CTRL9_XL_ADDR, CTRL9_XL_DEN) != 0) {
         return 1;
     }
+    if (write_byte(INT1_CTRL_ADDR, INT1_CTRL_DEN) != 0) {
+        return 1;
+    }
     return 0;
-    // TO-DO --> section 4.8.1: SHOULD BE GOOD BUT DOUBLE CHECK!
-    // 1. Gyro batch data rate and gyro ODR must be same
-    // 2. Acc batch data rate and acc ODR must be same
-    // 3. Gyro and acc data rate must be same
-    // 4. ODRCHG_EN must be set to 0
-    // 5. DEC_TS_BATCH must be set to 00
 }
 
 int set_frequency(int32_t frequency) {
@@ -83,19 +80,7 @@ int set_frequency(int32_t frequency) {
     }
 }
 
-int configure_fifo() {
-    if (write_byte(FIFO_CTRL1_ADDR, FIFO_CTRL1) != 0) {
-        return 1;
-    }
-    if (write_byte(FIFO_CTRL2_ADDR, FIFO_CTRL2) != 0) {
-        return 1;
-    }
-    if (FIFO_CTRL3 == 0x00) {
-        return 1;
-    }
-    if (write_byte(FIFO_CTRL3_ADDR, FIFO_CTRL3) != 0) {
-        return 1;
-    }
+int disable_fifo() {
     if (write_byte(FIFO_CTRL4_ADDR, FIFO_CTRL4) != 0) {
         return 1;
     }
@@ -117,6 +102,64 @@ int configure_gyro() {
         return 1;
     }
     if (write_byte(CTRL7_G_ADDR, CTRL7_G) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+int read_single_measurement(uint8_t address, int16_t *measurement, bool check_den_stamp) {
+    // STEP 1: Read MSB and LSB bytes
+    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET) != HAL_OK) {
+        return 1;
+    }
+    write_buffer[0] = address | 0x80;
+    if (HAL_SPI_Transmit(&hspi2, write_buffer, 1, TIMEOUT) != HAL_OK) {
+        return 1;
+    }
+    if (HAL_SPI_Receive(&hspi2, read_buffer, 2, TIMEOUT) != HAL_OK) {
+        return 1;
+    }
+    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET) != HAL_OK) {
+        return 1;
+    }
+    // STEP 2: Check den bit
+    if (check_den_stamp) {
+        if (read_buffer[0] & 0x01 != 0x01) {
+            return 1;
+        }
+    }
+    // STEP 3: Convert measurement to decimal
+    // Source: https://stackoverflow.com/questions/3180777/join-msb-and-lsb-of-a-16-bit-signed-integer-twos-complement
+    uint16_t raw_data = ((uint16_t) read_buffer[1] << 8) | ((uint16_t) read_buffer[0]);
+    int16_t data = (int16_t) raw_data;
+    *measurement = data;
+    return 0;
+}
+
+int read_measurements_den(int16_t *x_accel,
+                          int16_t *y_accel,
+                          int16_t *z_accel,
+                          int16_t *x_gyro,
+                          int16_t *y_gyro,
+                          int16_t *z_gyro) {
+    // STEP 1: Read accelerometer measurements
+    if (read_single_measurement(OUTX_L_A_ADDR, x_accel, false) != 0) {
+        return 1;
+    }
+    if (read_single_measurement(OUTY_L_A_ADDR, y_accel, false) != 0) {
+        return 1;
+    }
+    if (read_single_measurement(OUTZ_L_A_ADDR, z_accel, true) != 0) {
+        return 1;
+    }
+    // STEP 2: Read gyroscope measurements
+    if (read_single_measurement(OUTX_L_G_ADDR, x_gyro, false) != 0) {
+        return 1;
+    }
+    if (read_single_measurement(OUTY_L_G_ADDR, y_gyro, false) != 0) {
+        return 1;
+    }
+    if (read_single_measurement(OUTZ_L_G_ADDR, z_gyro, false) != 0) {
         return 1;
     }
     return 0;
