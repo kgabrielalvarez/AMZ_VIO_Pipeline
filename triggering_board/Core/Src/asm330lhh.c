@@ -53,6 +53,19 @@ int configure_imu_den() {
     return 0;
 }
 
+int configure_imu_standard() {
+    if (write_byte(CTRL6_C_ADDR, CTRL6_C_STANDARD) != 0) {
+        return 1;
+    }
+    if (write_byte(CTRL9_XL_ADDR, CTRL9_XL_STANDARD) != 0) {
+        return 1;
+    }
+    if (write_byte(INT1_CTRL_ADDR, INT1_CTRL_STANDARD) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int set_frequency(int32_t frequency) {
     switch (frequency) {
         case 833:
@@ -136,12 +149,34 @@ int read_single_measurement(uint8_t address, int16_t *measurement, bool check_de
     return 0;
 }
 
-int read_measurements_den(int16_t *x_accel,
-                          int16_t *y_accel,
-                          int16_t *z_accel,
-                          int16_t *x_gyro,
-                          int16_t *y_gyro,
-                          int16_t *z_gyro) {
+int check_if_measurements_ready(bool *measurements_ready) {
+    // STEP 1: Read STATUS_REG
+    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET) != HAL_OK) {
+        return 1;
+    }
+    write_buffer[0] = STATUS_REG_ADDR | 0x80;
+    if (HAL_SPI_Transmit(&hspi2, write_buffer, 1, TIMEOUT) != HAL_OK) {
+        return 1;
+    }
+    if (HAL_SPI_Receive(&hspi2, read_buffer, 1, TIMEOUT) != HAL_OK) {
+        return 1;
+    }
+    if (HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET) != HAL_OK) {
+        return 1;
+    }
+    // STEP 2: Check if both the accelerometer and gyroscope measurements are ready
+    if ((read_buffer[0] & STATUS_REG_MASK) == STATUS_REG_MASK) {
+        *measurements_ready = true;
+    }
+    else {
+        *measurements_ready = false;
+    }
+    return 0;
+}
+
+int read_measurements(int16_t *x_accel, int16_t *y_accel, int16_t *z_accel,
+                      int16_t *x_gyro, int16_t *y_gyro, int16_t *z_gyro,
+                      bool den_enabled) {
     // STEP 1: Read accelerometer measurements
     if (read_single_measurement(OUTX_L_A_ADDR, x_accel, false) != 0) {
         return 1;
@@ -149,7 +184,7 @@ int read_measurements_den(int16_t *x_accel,
     if (read_single_measurement(OUTY_L_A_ADDR, y_accel, false) != 0) {
         return 1;
     }
-    if (read_single_measurement(OUTZ_L_A_ADDR, z_accel, true) != 0) {
+    if (read_single_measurement(OUTZ_L_A_ADDR, z_accel, den_enabled) != 0) {
         return 1;
     }
     // STEP 2: Read gyroscope measurements

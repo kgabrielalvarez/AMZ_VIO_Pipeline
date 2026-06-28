@@ -17,15 +17,6 @@
 #define INT1_CTRL_DEN           0x80
 #define INT1_CTRL_STANDARD      0x03
 // FIFO Configuration
-// #define FIFO_CTRL1_ADDR         0x07
-// #define FIFO_CTRL1              0x00
-// #define FIFO_CTRL2_ADDR         0x08
-// #define FIFO_CTRL2              0x00
-// #define FIFO_CTRL3_ADDR         0x09
-// #define FIFO_CTRL3_833          0x77 // 833 Hz
-// #define FIFO_CTRL3_1667         0x88 // 1667 Hz
-// #define FIFO_CTRL3_3333         0x99 // 3333 Hz
-// #define FIFO_CTRL3_6667         0xAA // 6667 Hz
 #define FIFO_CTRL4_ADDR         0x0A
 #define FIFO_CTRL4              0x00
 // Accelerometer configuration
@@ -80,8 +71,10 @@ int configure_gyro();
 
 int read_single_measurement(uint8_t address, int32_t *measurement, bool check_den_stamp);
 
-int read_measurements_den();
+int check_if_measurements_ready(bool *measurements_ready);
 
-int read_measurements_standard();
+int read_measurements(int16_t *x_accel, int16_t *y_accel, int16_t *z_accel,
+                      int16_t *x_gyro, int16_t *y_gyro, int16_t *z_gyro,
+                      bool den_enabled);
 
 #endif
