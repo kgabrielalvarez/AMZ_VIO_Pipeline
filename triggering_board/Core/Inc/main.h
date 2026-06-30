@@ -63,8 +63,9 @@ void Error_Handler(void);
 #define TRIGGER_GPIO_Port GPIOA
 #define EXP_ACT_Pin GPIO_PIN_6
 #define EXP_ACT_GPIO_Port GPIOA
-#define IMU_INPUT_Pin GPIO_PIN_11
-#define IMU_INPUT_GPIO_Port GPIOB
+#define IMU_INT1_Pin GPIO_PIN_11
+#define IMU_INT1_GPIO_Port GPIOB
+#define IMU_INT1_EXTI_IRQn EXTI15_10_IRQn
 #define CS_Pin GPIO_PIN_9
 #define CS_GPIO_Port GPIOA
 #define VSENSE_Pin GPIO_PIN_4
