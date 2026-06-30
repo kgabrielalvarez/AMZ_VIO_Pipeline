@@ -78,11 +78,15 @@ int16_t z_gyro;
 int32_t imu_frequency = 833; // [HZ]
 bool den_enabled = false;
 imu_status_t imu_status;
+int32_t status_reg_value = 0;
+int32_t status_reg_value_2 = 0;
 
 // IMU interrupt callback
 __weak void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 
-	if (GPIO_Pin == IMU_INT_Pin) {
+	HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_SET);
+
+	if (GPIO_Pin == IMU_INPUT_Pin) {
 
 		bool measurement_ready = false;
 		imu_status = check_if_imu_measurements_ready(&measurement_ready);
@@ -141,14 +145,88 @@ int main(void)
   while (1)
   {
 
-	  uint8_t whoami_address = 0x8F;
+//	  imu_status = read_imu_measurements(&x_accel, &y_accel, &z_accel, &x_gyro, &y_gyro, &z_gyro, den_enabled);
+//	  HAL_Delay(500);
+
+	  uint8_t read_address = STATUS_REG_ADDR | 0x80;
+	  read_address = INT1_CTRL_ADDR | 0x80;
 	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
-	  HAL_SPI_Transmit(&hspi2, &whoami_address, 1, 100);
+	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
 	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
 	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
 
-	  HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
-	  HAL_Delay(100);
+	  // Check status registers go high
+	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+	  if ((buffer[0] & 0x01) == 0x01) {
+		  status_reg_value = 1;
+		  if (HAL_GPIO_ReadPin(IMU_INPUT_GPIO_Port, IMU_INPUT_Pin) == GPIO_PIN_SET) {
+			  status_reg_value_2 = 22;
+			  HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_SET);
+		  }
+	  }
+	  else if ((buffer[0] & 0x02) == 0x02) {
+		  status_reg_value = 2;
+	  }
+
+//	  uint8_t read_address = 0x8F;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+//
+//	  read_address = CTRL6_C_ADDR | 0x80;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+//
+//	  read_address = CTRL9_XL_ADDR | 0x80;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+//
+//	  read_address = INT1_CTRL_ADDR | 0x80;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+//
+//	  read_address = FIFO_CTRL4_ADDR | 0x80;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+//
+//	  read_address = CTRL1_XL_ADDR | 0x80;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+//
+//	  read_address = CTRL8_XL_ADDR | 0x80;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+//
+//	  read_address = CTRL2_G_ADDR | 0x80;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+//
+//	  read_address = CTRL7_G_ADDR | 0x80;
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
+//	  HAL_SPI_Transmit(&hspi2, &read_address, 1, 100);
+//	  HAL_SPI_Receive(&hspi2, buffer, 1, 100);
+//	  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
+
+//	  HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
+//	  HAL_Delay(100);
 
     /* USER CODE END WHILE */
 
@@ -404,17 +482,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(EXP_ACT_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : IMU_INT_Pin */
-  GPIO_InitStruct.Pin = IMU_INT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(IMU_INT_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : VSENSE_Pin */
-  GPIO_InitStruct.Pin = VSENSE_Pin;
+  /*Configure GPIO pins : IMU_INPUT_Pin VSENSE_Pin */
+  GPIO_InitStruct.Pin = IMU_INPUT_Pin|VSENSE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(VSENSE_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : DEBUG_LED_Pin */
   GPIO_InitStruct.Pin = DEBUG_LED_Pin;
@@ -422,10 +494,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(DEBUG_LED_GPIO_Port, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */

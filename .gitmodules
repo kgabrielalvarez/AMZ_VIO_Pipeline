@@ -1,0 +1,3 @@
+[submodule "triggering_board/Drivers/asm330lhh"]
+	path = triggering_board/Drivers/asm330lhh
+	url = https://github.com/STMicroelectronics/asm330lhhxg1-pid.git

@@ -16,7 +16,7 @@
 // DRDY (Data Ready) Configuration
 #define INT1_CTRL_ADDR          0x0D
 #define INT1_CTRL_DEN           0x80
-#define INT1_CTRL_STANDARD      0x03
+#define INT1_CTRL_STANDARD      0x01 //0x03
 // FIFO Configuration
 #define FIFO_CTRL4_ADDR         0x0A
 #define FIFO_CTRL4              0x00
