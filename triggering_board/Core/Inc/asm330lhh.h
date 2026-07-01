@@ -10,7 +10,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 #define BOOT_TIME 10 // ms
-#define TIMEOUT 100 // ms
+#define TIMEOUT 1000 // ms
 
 /* External variables --------------------------------------------------------*/
 extern SPI_HandleTypeDef hspi2;
