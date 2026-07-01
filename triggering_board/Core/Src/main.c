@@ -73,7 +73,7 @@ uint8_t drdy_event;
 // IMU interrupt callback
 __weak void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == IMU_INT1_Pin) {
-		asm330lhhxg1_read_data_irq_handler();
+		drdy_event = 1;
 	}
 }
 
@@ -123,14 +123,10 @@ int main(void)
   while (1)
   {
 
-	  read_measurements(acceleration_mg, angular_rate_mdps);
-
-//	  if (drdy_event) {
-//		  // Reset drdy_event
-//		  drdy_event = 0;
-//		  // Update measurements
-//		  read_measurements(acceleration_mg, angular_rate_mdps);
-//	  }
+	  if (drdy_event) {
+		  drdy_event = 0;
+		  read_measurements(acceleration_mg, angular_rate_mdps);
+	  }
 
     /* USER CODE END WHILE */
 
@@ -294,7 +290,7 @@ static void MX_SPI2_Init(void)
   hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi2.Init.NSS = SPI_NSS_SOFT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;

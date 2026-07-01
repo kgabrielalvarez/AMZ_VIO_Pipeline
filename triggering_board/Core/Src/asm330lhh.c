@@ -94,23 +94,13 @@ void configure_imu(void) {
     asm330lhhxg1_gy_full_scale_set(&dev_ctx, ASM330LHHXG1_500dps);
 
     // Generate interrupt on INT1 when accelerometer data is ready
-    // asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
-    // int1_route.int1_ctrl.int1_drdy_xl = PROPERTY_ENABLE;
-    // asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
+     asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
+     int1_route.int1_ctrl.int1_drdy_xl = PROPERTY_ENABLE;
+     asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
 
     // Configure filtering
     // asm330lhhxg1_xl_hp_path_on_out_set(&dev_ctx, ASM330LHHXG1_LP_ODR_DIV_100);
     // asm330lhhxg1_xl_filter_lp2_set(&dev_ctx, PROPERTY_ENABLE);
-}
-
-// @brief  Interrupt handler
-void asm330lhhxg1_read_data_irq_handler(void) {
-  uint8_t reg;
-  // Read output only if new accelerometer value is available
-  asm330lhhxg1_xl_flag_data_ready_get(&dev_ctx, &reg);
-  if (reg) {
-	  drdy_event = 1;
-  }
 }
 
 // @brief Read Measurements

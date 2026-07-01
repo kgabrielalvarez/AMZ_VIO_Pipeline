@@ -14,7 +14,6 @@
 
 /* External variables --------------------------------------------------------*/
 extern SPI_HandleTypeDef hspi2;
-extern uint8_t drdy_event;
 
 /* Declare Private functions -------------------------------------------------*/
 int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len);
