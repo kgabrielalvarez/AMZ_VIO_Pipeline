@@ -7,6 +7,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "../../Drivers/asm330lhh/asm330lhhxg1_reg.h"
+#include "string.h"
 
 /* Private macro -------------------------------------------------------------*/
 #define BOOT_TIME 10 // ms

@@ -1,6 +1,5 @@
 /* Include -------------------------------------------------------------------*/
 #include "asm330lhh.h"
-#include "string.h"
 
 /* Private variables ---------------------------------------------------------*/
 static int16_t data_raw_acceleration[3];

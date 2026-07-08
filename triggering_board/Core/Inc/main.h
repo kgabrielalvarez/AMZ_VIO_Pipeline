@@ -32,6 +32,9 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "asm330lhh.h"
+//#include "can.h"
+
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
