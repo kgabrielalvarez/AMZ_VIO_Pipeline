@@ -10,8 +10,8 @@ trap cleanup EXIT INT
 # Source
 source install/setup.bash
 
-# Configure CAN
-sudo ip link set can0 type can bitrate 500000
+# Configure CAN FD
+sudo ip link set can0 type can bitrate 500000 dbitrate 500000 berr-reporting on fd on
 sudo ip link set can0 up
 
 # Start Nodes

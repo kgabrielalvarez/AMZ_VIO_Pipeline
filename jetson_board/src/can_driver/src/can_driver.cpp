@@ -9,10 +9,74 @@ can_driver::can_driver() : Node("can_driver") {
     subscriber_ = this->create_subscription<std_msgs::msg::Bool>("triggering_board_active", 
         10, std::bind(&can_driver::subscriber_callback, this, std::placeholders::_1));
 
+    // Assign values to start and stop frames
+    start_triggering_board_frame_.can_id = 0x001;
+    start_triggering_board_frame_.len = 1;
+    start_triggering_board_frame_.data[0] = 0x01;
+    stop_triggering_board_frame_.can_id = 0x001;
+    stop_triggering_board_frame_.len = 1;
+    stop_triggering_board_frame_.data[0] = 0x00;
+
+    // Print start of node
+    RCLCPP_INFO(this->get_logger(), "can_driver started...");
+
 }
 
-void can_driver::start_can() {
+// Destructor
+can_driver::~can_driver() {
 
+    run_triggering_board_.store(false);
+    this->stop_triggering_board();
+
+}
+
+void can_driver::read_can() {
+    
+    // Print start of CAN thread
+    RCLCPP_INFO(this->get_logger(), "CAN thread started...");
+
+    while (run_triggering_board_.load()) {
+
+        // Read CAN frame
+        num_bytes_read_ = read(socket_, &frame_, sizeof(struct canfd_frame));
+
+        // Check that we didn't get an error
+        if (num_bytes_read_ < 0) {
+            perror("Error reading CAN Bus");
+        }
+
+        // Check that we received a complete CAN frame
+        if (num_bytes_read_ < sizeof(struct canfd_frame)) {
+            RCLCPP_ERROR(this->get_logger(), "Error: incomplete CAN frame\n");
+        }
+
+        // Convert uint8_t to float
+        std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], 4);
+        std::memcpy(&acceleration_y_.as_bytes[0], &frame_.data[4], 4);
+        std::memcpy(&acceleration_z_.as_bytes[0], &frame_.data[8], 4);
+        std::memcpy(&angular_rate_x_.as_bytes[0], &frame_.data[12], 4);
+        std::memcpy(&angular_rate_y_.as_bytes[0], &frame_.data[16], 4);
+        std::memcpy(&angular_rate_z_.as_bytes[0], &frame_.data[20], 4);
+        std::memcpy(&timestamp_.as_bytes[0], &frame_.data[4], 4);
+
+        // Publish: TO-DO
+        printf("Acceleration-x = %f.3 \n", acceleration_x_.as_float);
+
+    }
+
+    // Print stop of CAN thread
+    RCLCPP_INFO(this->get_logger(), "CAN thread stopped");
+
+}
+
+void can_driver::start_triggering_board() {
+
+    // Define socket
+    socket_ = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+    // Configure socket to use CAN FD
+    if (setsockopt(socket_, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &enable_can_fd_, sizeof(enable_can_fd_)) < 0) {
+        perror("Error setting socket options");
+    }
     // Set interface name
     strcpy(interface_.ifr_name, can_socket_name_.c_str());
     // Get interface index
@@ -26,60 +90,58 @@ void can_driver::start_can() {
         RCLCPP_ERROR(this->get_logger(), "Error in binding socket");
     }
 
-    // Enable flag for can_reader_thread_ to run continuously
-    run_triggering_board_ = true;
     // Start thread to read CAN bus
     can_reader_thread_ = std::thread(&can_driver::read_can, this);
-    // Allows thread to run independently
-    can_reader_thread_.detach();
+    
+    // Send triggering board command to start running
+    num_bytes_write_ = write(socket_, &start_triggering_board_frame_, sizeof(struct canfd_frame));
 
-    // TO-DO: move this to subscriber callback
-    this->start_triggering_board();
-}
-
-void can_driver::read_can() {
-    while (run_triggering_board_) {
-
-        // Read CAN frame
-        num_bytes_read_ = read(socket_, &frame_, sizeof(struct can_frame));
-
-        // Check that we didn't get an error
-        if (num_bytes_read_ < 0) {
-            perror("Error reading CAN Bus");
-            break;
-        }
-
-        // Check that we received a complete CAN frame
-        if (num_bytes_read_ < sizeof(struct can_frame)) {
-            fprintf(stderr, "Error: incomplete CAN frame\n");
-            break;
-        }
-
-        // Decode: TO-DO
-
-        // Publish: TO-DO
-        printf("Data bytes 0x%x, 0x%x, 0x%x \n", frame_.data[0], frame_.data[1], frame_.data[2]);
-
+    // Check that we didn't get an error
+    if (num_bytes_write_ < 0) {
+        perror("Error writing start_triggering_board_frame_ to CAN Bus");
     }
-}
 
-void can_driver::stop_can() {
-    // TO-DO
-}
-
-void can_driver::start_triggering_board() {
-
-    this->start_can();
-    // Send triggering board command to start running: TO-DO
+    // TO-DO: confirm that STM32 started publishing
 
 }
 
 void can_driver::stop_triggering_board() {
-    // TO-DO
+
+    // Wait for can_reader_thread_ to finish executing
+    if (can_reader_thread_.joinable()) {
+        can_reader_thread_.join();
+    }
+
+    // Send triggering board command to stop running
+    num_bytes_write_ = write(socket_, &stop_triggering_board_frame_, sizeof(struct canfd_frame));
+
+    // Check that we didn't get an error
+    if (num_bytes_write_ < 0) {
+        perror("Error writing stop_triggering_board_frame_ to CAN Bus");
+    }
+
+    // TO-DO: confirm that STM32 stopped publishing
+
+    // Close the socket
+    close(socket_);
+
+    // Notify t
+    RCLCPP_INFO(this->get_logger(), "Triggering board stopped, CAN Bus closed");
+
 }
 
-void can_driver::subscriber_callback(const std_msgs::msg::Bool msg) {
-    // TO-DO
+void can_driver::subscriber_callback(const std_msgs::msg::Bool::SharedPtr msg) {
+
+    // Enable or disable flag for can_reader_thread_ to run continuously
+    run_triggering_board_.store(msg->data);
+
+    if (run_triggering_board_.load()) {
+        this->start_triggering_board();
+    }
+    else {
+        this->stop_triggering_board();
+    }
+
 }
 
 int main(int argc, char * argv[]) {

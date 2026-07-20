@@ -15,6 +15,12 @@
 #include "std_msgs/msg/bool.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 
+// Type for converting uint8_t to float
+union bytes_to_float_t {
+    uint8_t as_bytes[4];
+    float as_float;
+};
+
 // Driver to connect CAN to ROS2
 class can_driver : public rclcpp::Node {
 
@@ -22,6 +28,9 @@ class can_driver : public rclcpp::Node {
 
         // Constructor
         can_driver();
+
+        // Destructor
+        ~can_driver();
 
     private:
 
@@ -32,26 +41,39 @@ class can_driver : public rclcpp::Node {
         // CAN setup
         std::string can_socket_name_ = "can0";
         struct ifreq interface_;
-        int socket_ = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+        int socket_;
+        int enable_can_fd_ = 1;
         struct sockaddr_can can_socket_address_;
 
         // read_can() thread
         std::thread can_reader_thread_;
         std::atomic<bool> run_triggering_board_;
-        struct can_frame frame_;
+        struct canfd_frame frame_;
         ssize_t num_bytes_read_;
+
+        // Variables to publish
+        bytes_to_float_t acceleration_x_; // [m/s^2]
+        bytes_to_float_t acceleration_y_; // [m/s^2]
+        bytes_to_float_t acceleration_z_; // [m/s^2]
+        bytes_to_float_t angular_rate_x_; // [rad/s]
+        bytes_to_float_t angular_rate_y_; // [rad/s]
+        bytes_to_float_t angular_rate_z_; // [rad/s]
+        bytes_to_float_t timestamp_;      // [ms]
+
+        // Write to CAN Bus
+        ssize_t num_bytes_write_;
+        struct canfd_frame start_triggering_board_frame_;
+        struct canfd_frame stop_triggering_board_frame_;
 
         // Publisher & Subscriber
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher_;
         rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr subscriber_;
 
         // Functions
-        void start_can();
         void read_can();
-        void stop_can();
         void start_triggering_board();
         void stop_triggering_board();
-        void subscriber_callback(const std_msgs::msg::Bool msg);
+        void subscriber_callback(const std_msgs::msg::Bool::SharedPtr msg);
 
 };
 
