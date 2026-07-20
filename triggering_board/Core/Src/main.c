@@ -88,6 +88,9 @@ FDCAN_RxHeaderTypeDef   RxHeader3;
 uint8_t               TxData3[8];
 uint8_t               RxData3[8];
 
+// Flag to indicate whether triggering board is active or not
+bool triggering_board_active = false;
+
 /* USER CODE END 0 */
 
 /**
@@ -146,8 +149,8 @@ int main(void)
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_MASK;
   sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
-  sFilterConfig.FilterID1 = 0x11;
-  sFilterConfig.FilterID2 = 0x11;
+  sFilterConfig.FilterID1 = 0x001;
+  sFilterConfig.FilterID2 = 0x7FF;
   if (HAL_FDCAN_ConfigFilter(&hfdcan3, &sFilterConfig) != HAL_OK)
   {
     /* Filter configuration Error */
@@ -210,14 +213,20 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  TxData2[0] = 0;
-	  TxData2[1] = 1;
-	  TxData2[2] = 2;
-	  TxData2[3] = 3;
-	  TxData2[4] = 4;
-	  if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader2, TxData2)!= HAL_OK)
-	  {
-	    Error_Handler();
+
+	  if (triggering_board_active) {
+		  TxData3[0] = 55;
+		  TxData3[1] = 44;
+		  TxData3[2] = 55;
+		  TxData3[3] = 44;
+		  TxData3[4] = 55;
+		  TxData3[5] = 44;
+		  TxData3[6] = 55;
+		  TxData3[7] = 44;
+		  if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3)!= HAL_OK)
+		  {
+			Error_Handler();
+		  }
 	  }
 	  HAL_Delay (1000);
 
@@ -514,6 +523,15 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
       /* Reception Error */
       Error_Handler();
     }
+
+    // Set flag
+    if (RxData3[0] == 0x01) {
+    	triggering_board_active = true;
+    }
+    else {
+    	triggering_board_active = false;
+    }
+
     if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK)
     {
       /* Notification Error */

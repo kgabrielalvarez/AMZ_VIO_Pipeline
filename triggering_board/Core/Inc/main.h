@@ -32,6 +32,7 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "stdbool.h"
 #include "asm330lhh.h"
 //#include "can.h"
 
