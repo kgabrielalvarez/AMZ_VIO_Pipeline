@@ -70,6 +70,9 @@ float_t acceleration_mg[3];
 float_t angular_rate_mdps[3];
 uint8_t drdy_event;
 
+// Current time
+uint32_t timestamp;
+
 // IMU interrupt callback
 __weak void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == IMU_INT1_Pin) {
@@ -85,8 +88,8 @@ uint8_t               TxData2[8];
 uint8_t               RxData2[8];
 FDCAN_TxHeaderTypeDef   TxHeader3;
 FDCAN_RxHeaderTypeDef   RxHeader3;
-uint8_t               TxData3[8];
-uint8_t               RxData3[8];
+uint8_t               TxData3[32];
+uint8_t               RxData3[32];
 
 // Flag to indicate whether triggering board is active or not
 bool triggering_board_active = false;
@@ -197,13 +200,13 @@ int main(void)
 
 
   // Configure TX Header for fdcan3
-  TxHeader3.Identifier = 0x22;
+  TxHeader3.Identifier = 0x002;
   TxHeader3.IdType = FDCAN_STANDARD_ID;
   TxHeader3.TxFrameType = FDCAN_DATA_FRAME;
-  TxHeader3.DataLength = FDCAN_DLC_BYTES_8;
+  TxHeader3.DataLength = FDCAN_DLC_BYTES_32;
   TxHeader3.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
   TxHeader3.BitRateSwitch = FDCAN_BRS_OFF;
-  TxHeader3.FDFormat = FDCAN_CLASSIC_CAN;
+  TxHeader3.FDFormat = FDCAN_FD_CAN;
   TxHeader3.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   TxHeader3.MessageMarker = 0;
 
@@ -214,15 +217,20 @@ int main(void)
   while (1)
   {
 
+	  if (drdy_event) {
+		  drdy_event = 0;
+		  read_measurements(acceleration_mg, angular_rate_mdps);
+	  }
+
 	  if (triggering_board_active) {
-		  TxData3[0] = 55;
-		  TxData3[1] = 44;
-		  TxData3[2] = 55;
-		  TxData3[3] = 44;
-		  TxData3[4] = 55;
-		  TxData3[5] = 44;
-		  TxData3[6] = 55;
-		  TxData3[7] = 44;
+		  memcpy(&TxData3[0], &acceleration_mg[0], 4);
+		  memcpy(&TxData3[4], &acceleration_mg[1], 4);
+		  memcpy(&TxData3[8], &acceleration_mg[2], 4);
+		  memcpy(&TxData3[12], &angular_rate_mdps[0], 4);
+		  memcpy(&TxData3[16], &angular_rate_mdps[1], 4);
+		  memcpy(&TxData3[20], &angular_rate_mdps[2], 4);
+		  timestamp = HAL_GetTick();
+		  memcpy(&TxData3[24], &timestamp, 4);
 		  if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3)!= HAL_OK)
 		  {
 			Error_Handler();
@@ -342,7 +350,7 @@ static void MX_FDCAN3_Init(void)
   /* USER CODE END FDCAN3_Init 1 */
   hfdcan3.Instance = FDCAN3;
   hfdcan3.Init.ClockDivider = FDCAN_CLOCK_DIV1;
-  hfdcan3.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+  hfdcan3.Init.FrameFormat = FDCAN_FRAME_FD_NO_BRS;
   hfdcan3.Init.Mode = FDCAN_MODE_NORMAL;
   hfdcan3.Init.AutoRetransmission = DISABLE;
   hfdcan3.Init.TransmitPause = DISABLE;
