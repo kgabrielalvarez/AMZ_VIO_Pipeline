@@ -19,6 +19,7 @@
 union bytes_to_float_t {
     uint8_t as_bytes[4];
     float as_float;
+    uint32_t as_uint32;
 };
 
 // Driver to connect CAN to ROS2
@@ -59,6 +60,10 @@ class can_driver : public rclcpp::Node {
         bytes_to_float_t angular_rate_y_; // [rad/s]
         bytes_to_float_t angular_rate_z_; // [rad/s]
         bytes_to_float_t timestamp_;      // [ms]
+
+        // Unit conversion factors
+        float mg_to_ms2_ = 9.81/1000.0;
+        float dps_to_rps_ = 3.1415926535/180.0;
 
         // Write to CAN Bus
         ssize_t num_bytes_write_;

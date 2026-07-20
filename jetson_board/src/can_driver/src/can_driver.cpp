@@ -57,10 +57,27 @@ void can_driver::read_can() {
         std::memcpy(&angular_rate_x_.as_bytes[0], &frame_.data[12], 4);
         std::memcpy(&angular_rate_y_.as_bytes[0], &frame_.data[16], 4);
         std::memcpy(&angular_rate_z_.as_bytes[0], &frame_.data[20], 4);
-        std::memcpy(&timestamp_.as_bytes[0], &frame_.data[4], 4);
+        std::memcpy(&timestamp_.as_bytes[0], &frame_.data[24], 4);
+
+        // Unit conversion:
+        // 1. Accelerometer: mg to m/s^2
+        // 2. Gyroscope: deg/s to rad/s
+        acceleration_x_.as_float = acceleration_x_.as_float*mg_to_ms2_;
+        acceleration_y_.as_float = acceleration_y_.as_float*mg_to_ms2_;
+        acceleration_z_.as_float = acceleration_z_.as_float*mg_to_ms2_;
+        angular_rate_x_.as_float = angular_rate_x_.as_float*dps_to_rps_;
+        angular_rate_y_.as_float = angular_rate_y_.as_float*dps_to_rps_;
+        angular_rate_z_.as_float = angular_rate_z_.as_float*dps_to_rps_;
 
         // Publish: TO-DO
-        printf("Acceleration-x = %f.3 \n", acceleration_x_.as_float);
+        printf("ax = %f.3 ay = %f.3 az = %f.3 wx = %f.3 wy = %f.3 wz = %f.3 timestamp = %u\n", 
+            acceleration_x_.as_float,
+            acceleration_y_.as_float,
+            acceleration_z_.as_float,
+            angular_rate_x_.as_float,
+            angular_rate_y_.as_float,
+            angular_rate_z_.as_float,
+            timestamp_.as_uint32);
 
     }
 
