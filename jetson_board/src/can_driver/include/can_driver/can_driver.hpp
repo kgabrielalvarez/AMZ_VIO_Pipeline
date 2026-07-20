@@ -53,17 +53,20 @@ class can_driver : public rclcpp::Node {
         ssize_t num_bytes_read_;
 
         // Variables to publish
-        bytes_to_float_t acceleration_x_; // [m/s^2]
-        bytes_to_float_t acceleration_y_; // [m/s^2]
-        bytes_to_float_t acceleration_z_; // [m/s^2]
-        bytes_to_float_t angular_rate_x_; // [rad/s]
-        bytes_to_float_t angular_rate_y_; // [rad/s]
-        bytes_to_float_t angular_rate_z_; // [rad/s]
-        bytes_to_float_t timestamp_;      // [ms]
+        bytes_to_float_t acceleration_x_;     // [m/s^2]
+        bytes_to_float_t acceleration_y_;     // [m/s^2]
+        bytes_to_float_t acceleration_z_;     // [m/s^2]
+        bytes_to_float_t angular_velocity_x_; // [rad/s]
+        bytes_to_float_t angular_velocity_y_; // [rad/s]
+        bytes_to_float_t angular_velocity_z_; // [rad/s]
+        bytes_to_float_t timestamp_;          // [ms]
 
         // Unit conversion factors
         float mg_to_ms2_ = 9.81/1000.0;
         float dps_to_rps_ = 3.1415926535/180.0;
+
+        // Message to publish
+        sensor_msgs::msg::Imu imu_message_;
 
         // Write to CAN Bus
         ssize_t num_bytes_write_;

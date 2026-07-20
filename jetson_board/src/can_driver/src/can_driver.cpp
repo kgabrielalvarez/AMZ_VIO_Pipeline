@@ -54,9 +54,9 @@ void can_driver::read_can() {
         std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], 4);
         std::memcpy(&acceleration_y_.as_bytes[0], &frame_.data[4], 4);
         std::memcpy(&acceleration_z_.as_bytes[0], &frame_.data[8], 4);
-        std::memcpy(&angular_rate_x_.as_bytes[0], &frame_.data[12], 4);
-        std::memcpy(&angular_rate_y_.as_bytes[0], &frame_.data[16], 4);
-        std::memcpy(&angular_rate_z_.as_bytes[0], &frame_.data[20], 4);
+        std::memcpy(&angular_velocity_x_.as_bytes[0], &frame_.data[12], 4);
+        std::memcpy(&angular_velocity_y_.as_bytes[0], &frame_.data[16], 4);
+        std::memcpy(&angular_velocity_z_.as_bytes[0], &frame_.data[20], 4);
         std::memcpy(&timestamp_.as_bytes[0], &frame_.data[24], 4);
 
         // Unit conversion:
@@ -65,19 +65,22 @@ void can_driver::read_can() {
         acceleration_x_.as_float = acceleration_x_.as_float*mg_to_ms2_;
         acceleration_y_.as_float = acceleration_y_.as_float*mg_to_ms2_;
         acceleration_z_.as_float = acceleration_z_.as_float*mg_to_ms2_;
-        angular_rate_x_.as_float = angular_rate_x_.as_float*dps_to_rps_;
-        angular_rate_y_.as_float = angular_rate_y_.as_float*dps_to_rps_;
-        angular_rate_z_.as_float = angular_rate_z_.as_float*dps_to_rps_;
+        angular_velocity_x_.as_float = angular_velocity_x_.as_float*dps_to_rps_;
+        angular_velocity_y_.as_float = angular_velocity_y_.as_float*dps_to_rps_;
+        angular_velocity_z_.as_float = angular_velocity_z_.as_float*dps_to_rps_;
 
-        // Publish: TO-DO
-        printf("ax = %f.3 ay = %f.3 az = %f.3 wx = %f.3 wy = %f.3 wz = %f.3 timestamp = %u\n", 
-            acceleration_x_.as_float,
-            acceleration_y_.as_float,
-            acceleration_z_.as_float,
-            angular_rate_x_.as_float,
-            angular_rate_y_.as_float,
-            angular_rate_z_.as_float,
-            timestamp_.as_uint32);
+        // Pass readings to publisher message
+        imu_message_.linear_acceleration.x = acceleration_x_.as_float;
+        imu_message_.linear_acceleration.y = acceleration_y_.as_float;
+        imu_message_.linear_acceleration.z = acceleration_z_.as_float;
+        imu_message_.angular_velocity.x = angular_velocity_x_.as_float;
+        imu_message_.angular_velocity.y = angular_velocity_y_.as_float;
+        imu_message_.angular_velocity.z = angular_velocity_z_.as_float;
+        imu_message_.header.stamp.sec = timestamp_.as_uint32 / 1000;
+        imu_message_.header.stamp.nanosec = (timestamp_.as_uint32 % 1000) * 1000000;
+
+        // Publish message
+        publisher_->publish(imu_message_);
 
     }
 
