@@ -6,20 +6,33 @@ camera_driver::camera_driver() : Node("camera_driver") {
     // Initialize Pylon runtime
     PylonInitialize();
 
-    try {
-        // Create an instant camera object with the first camera device found
-        CInstantCamera camera( CTlFactory::GetInstance().CreateFirstDevice() );
-        // Print camera found
-        std::cout << "Using device: " << camera.GetDeviceInfo().GetModelName() << std::endl << std::endl;
-    }
-    catch (const GenericException& e)
-    {
-        // Error handling.
-        std::cerr << "An exception occurred." << std::endl 
-        << e.GetDescription() << std::endl;
-    }
+    // Initialize transport layer factory, used to create, destroy, and enumerate transport layers and their devices
+    CTlFactory& tl_factory = CTlFactory::GetInstance();
 
-    std::cout << "Ran successfully!" << std::endl;
+    // Initialize list to store transport layer devices
+    DeviceInfoList_t devices_list;
+
+    // Add all detected cameras to list
+    tl_factory.EnumerateDevices(devices_list);
+
+    // Check how many cameras have been detected
+    if (devices_list.size() < 2) {
+        RCLCPP_ERROR(this->get_logger(), "Detected %d cameras but need at least 2 cameras\n", devices_list.size());
+    }
+    else {
+        if (devices_list.size() == 2) {
+            RCLCPP_INFO(this->get_logger(), "Detected 2 cameras\n");
+        }
+        else {
+            RCLCPP_INFO(this->get_logger(), "Detected %d cameras but only using the first 2\n", devices_list.size());
+        }
+
+        // Create camera instances
+        CInstantCamera camera_left(tl_factory.CreateDevice(devices_list[0]));
+        CInstantCamera camera_right(tl_factory.CreateDevice(devices_list[1]));
+        RCLCPP_INFO(this->get_logger(), "Left camera serial number: %s", camera_left.GetDeviceInfo().GetSerialNumber().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera serial number: %s", camera_right.GetDeviceInfo().GetSerialNumber().c_str());
+    }
 
 }
 
