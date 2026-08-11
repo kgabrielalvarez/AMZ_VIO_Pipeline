@@ -9,6 +9,8 @@
 
 // Include Pylon specific libraries
 #include <pylon/PylonIncludes.h>
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
 
 // Include ROS2 libraries
 #include "rclcpp/rclcpp.hpp"
@@ -25,8 +27,28 @@ class camera_driver : public rclcpp::Node {
         // Constructor
         camera_driver();
 
+        //
+        ~camera_driver();
+
     private:
-        // TO-DO
+
+        // Variables to read cameras
+        DeviceInfoList_t devices_list_;
+        int num_cameras_ = 2;
+        CInstantCameraArray cameras_;
+
+        // Camera parameters
+        EPixelType pixel_type_pylon_ = PixelType_BayerRG8;
+        std::string pixel_type_cv_ = sensor_msgs::image_encodings::BAYER_RGGB8;
+        int cv_mat_type_ = CV_8UC1;
+
+        // Publisher
+        rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr left_image_publisher_;
+        rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr right_image_publisher_;
+
+        // Methods
+        void check_parameters();
+        void convert_pylon_to_ros(const CGrabResultPtr& image_ptr);
 
 };
 

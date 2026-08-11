@@ -9,12 +9,19 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(pylon REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(cv_bridge REQUIRED)
+
+# include opencv directories
+include_directories(${OpenCV_INCLUDE_DIRS})
 
 # create executable
 add_executable(${PROJECT_NAME} src/${PROJECT_NAME}.cpp)
 
 # add dependencies
-ament_target_dependencies(${PROJECT_NAME} rclcpp)
+ament_target_dependencies(${PROJECT_NAME} 
+                          rclcpp
+                          cv_bridge)
 
 # expose header file to cpp file
 target_include_directories(${PROJECT_NAME} 
@@ -22,12 +29,14 @@ target_include_directories(${PROJECT_NAME}
                            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                            $<INSTALL_INTERFACE:include>)
 
-# link Pylon library
-target_link_libraries(${PROJECT_NAME} pylon::pylon)
+# link libraries
+target_link_libraries(${PROJECT_NAME}
+                      pylon::pylon
+                      ${OpenCV_LIBS})
 
 # Expose executable for ROS2 to find
 install(TARGETS
-       ${PROJECT_NAME}
-       DESTINATION lib/${PROJECT_NAME})
+        ${PROJECT_NAME}
+        DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

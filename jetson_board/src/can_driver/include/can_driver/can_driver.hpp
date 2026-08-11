@@ -77,7 +77,7 @@ class can_driver : public rclcpp::Node {
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher_;
         rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr subscriber_;
 
-        // Functions
+        // Methods
         void read_can();
         void start_triggering_board();
         void stop_triggering_board();
