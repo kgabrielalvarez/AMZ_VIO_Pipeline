@@ -11,59 +11,24 @@ camera_driver::camera_driver() : Node("camera_driver") {
     PylonInitialize();
 
     try {
+        // Set up cameras
+        configure_cameras();
 
-        // Initialize transport layer factory, used to create, destroy, and enumerate transport layers and their devices
-        CTlFactory& tl_factory = CTlFactory::GetInstance();
-
-        // Add all detected cameras to devices_list_
-        tl_factory.EnumerateDevices(devices_list_);
-
-        // Initialize the camera array
-        cameras_.Initialize(num_cameras_);
-
-        // Check how many cameras have been detected
-        if (devices_list_.size() < num_cameras_) {
-            RCLCPP_ERROR(this->get_logger(), "Detected %d cameras but need %d cameras", devices_list_.size(), num_cameras_);
-        }
-        else {
-            if (devices_list_.size() == num_cameras_) {
-                RCLCPP_INFO(this->get_logger(), "Detected %d cameras", num_cameras_);
-            }
-            else {
-                RCLCPP_INFO(this->get_logger(), "Detected %d cameras but only using the first %d", devices_list_.size(), num_cameras_);
-            }
-
-            // Create camera instances
-            for (size_t i = 0; i < num_cameras_; i++) {
-                cameras_[i].Attach(tl_factory.CreateDevice(devices_list_[i]));
-            }
-            RCLCPP_INFO(this->get_logger(), "Left camera serial number: %s", cameras_[0].GetDeviceInfo().GetSerialNumber().c_str());
-            RCLCPP_INFO(this->get_logger(), "Right camera serial number: %s", cameras_[1].GetDeviceInfo().GetSerialNumber().c_str());
-        }
-
-        // Check that all parameters are set correctly
-        // check_parameters();
-
-        // Start frame grabing
+        // Start getting images
         cameras_.StartGrabbing();
 
-        // Smart pointer to receive grabed frames
-        // See https://docs.baslerweb.com/pylonapi/cpp/class_pylon_1_1_c_grab_result_data#function-gettimestamp
-        // for the pointers public functions
-        CGrabResultPtr ptrGrabResult;
-
-        // Grab the images
-        for (int i = 0; i < 5000 && cameras_.IsGrabbing(); i++) {
-            
-            cameras_.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
-
-            convert_pylon_to_ros(ptrGrabResult);
-
-        }
-
+        // Start thread to read images
+        image_reader_thread_ = std::thread(&camera_driver::read_images, this);
     }
-    catch (const GenericException& e) {
-        RCLCPP_ERROR(this->get_logger(), "An exception occurred: %s", e.GetDescription());
+
+    // Handle Pylon Specific Errors
+    catch (const GenericException& error) {
+        RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
+    }
+
+    // Handle Custom Errors
+    catch (const std::runtime_error& error) {
+        RCLCPP_ERROR(this->get_logger(), error.what());
     }
 
 }
@@ -72,22 +37,121 @@ camera_driver::camera_driver() : Node("camera_driver") {
 camera_driver::~camera_driver() {
     RCLCPP_INFO(this->get_logger(), "Terminating Pylon");
     cameras_.StopGrabbing();
+    // Wait for thread to stop running
+    if (image_reader_thread_.joinable()) {
+        image_reader_thread_.join();
+    }
     PylonTerminate();
 }
 
-void camera_driver::check_parameters() {
+void camera_driver::read_images() {
 
-    // See: https://docs.baslerweb.com/pylonapi/cpp/sample_code#parametrizecamera_genericparameteraccess
-    // for example code
-    for (int i = 0; i < num_cameras_; i++) {
-        cameras_[i].Open();
-        INodeMap& node_map = cameras_[i].GetNodeMap();
-        CEnumParameter pixel_format(node_map, "PixelFormat");
-        std::cout << "Camera " << i << " pixel format: " << pixel_format.GetValue() << std::endl;
-        cameras_[i].Close();
+    // Smart pointer to receive grabed frames
+    // See https://docs.baslerweb.com/pylonapi/cpp/class_pylon_1_1_c_grab_result_data#function-gettimestamp
+    // for the pointers public functions
+    CGrabResultPtr ptrGrabResult;
 
-        // TO-DO the above needs to be fixed --> need to properly check through all the parameters and make sure they are actually what we exepct them to be.
+    while (rclcpp::ok() && cameras_.IsGrabbing()) {
+
+        try {
+            // Get image
+            cameras_.RetrieveResult(retrieve_result_timeout_, ptrGrabResult, TimeoutHandling_ThrowException);
+
+            // Convert from Pylon to OpenCV format and publish
+            convert_pylon_to_ros(ptrGrabResult);
+        }
+
+        // Handle Pylon Specific Errors
+        catch (const GenericException& error) {
+            RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
+            break;
+        }
+
+        // Handle Custom Errors
+        catch (const std::runtime_error& error) {
+            RCLCPP_ERROR(this->get_logger(), error.what());
+            break;
+        }
+
     }
+}
+
+void camera_driver::configure_cameras() {
+
+    // Initialize transport layer factory, used to create, destroy, and enumerate transport layers and their devices
+    CTlFactory& tl_factory = CTlFactory::GetInstance();
+
+    // Add all detected cameras to devices_list_
+    tl_factory.EnumerateDevices(devices_list_);
+
+    // Initialize the camera array
+    cameras_.Initialize(num_cameras_);
+
+    // Check how many cameras have been detected
+    if (devices_list_.size() < num_cameras_) {
+        throw std::runtime_error("Detected " + std::to_string(devices_list_.size()) + " cameras but needed " + std::to_string(num_cameras_) + " cameras");
+    }
+    if (devices_list_.size() > num_cameras_) {
+        RCLCPP_INFO(this->get_logger(), "Detected %d cameras but only using the first %d", devices_list_.size(), num_cameras_);
+    }
+    else {
+        RCLCPP_INFO(this->get_logger(), "Detected %d cameras", num_cameras_);
+    }
+
+    // Create camera instances
+    for (size_t i = 0; i < num_cameras_; i++) {
+        cameras_[i].Attach(tl_factory.CreateDevice(devices_list_[i]));
+    }
+
+    // Log camera serial numbers
+    RCLCPP_INFO(this->get_logger(), "Left camera serial number: %s", left_camera_.GetDeviceInfo().GetSerialNumber().c_str());
+    RCLCPP_INFO(this->get_logger(), "Right camera serial number: %s", right_camera_.GetDeviceInfo().GetSerialNumber().c_str());
+
+    // Configure left camera
+    left_camera_.Open();
+    INodeMap& left_node_map = left_camera_.GetNodeMap();
+
+    // Configure input and output lines
+    CEnumParameter(left_node_map, "LineSelector").SetValue("Line2");
+    CEnumParameter(left_node_map, "LineMode").SetValue("Input");
+    CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
+    CEnumParameter(left_node_map, "LineMode").SetValue("Output");
+
+    // Configure line 2 for hardware triggering:
+    // 1. Set trigger to initiate frame start
+    CEnumParameter(left_node_map, "TriggerSelector").SetValue("FrameStart");
+    CEnumParameter(left_node_map, "TriggerMode").SetValue("On");
+    CEnumParameter(left_node_map, "TriggerSource").SetValue("Line2");
+    CEnumParameter(left_node_map, "TriggerActivation").SetValue("RisingEdge");
+    // 2. Set exposure mode to "TriggerWidth"
+    CEnumParameter(left_node_map, "ExposureMode").SetValue("TriggerWidth");
+
+    // Configure line 3 for exposure active signal:
+    CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
+    CEnumParameter(left_node_map, "LineSource").SetValue("ExposureActive");
+
+    // Close left camera
+    left_camera_.Close();
+
+    // Configure right camera
+    right_camera_.Open();
+    INodeMap& right_node_map = right_camera_.GetNodeMap();
+
+    // Configure input lines
+    CEnumParameter(right_node_map, "LineSelector").SetValue("Line2");
+    CEnumParameter(right_node_map, "LineMode").SetValue("Input");
+
+    // Configure line 2 for hardware triggering:
+    // 1. Set trigger to initiate frame start
+    CEnumParameter(right_node_map, "TriggerSelector").SetValue("FrameStart");
+    CEnumParameter(right_node_map, "TriggerMode").SetValue("On");
+    CEnumParameter(right_node_map, "TriggerSource").SetValue("Line2");
+    CEnumParameter(right_node_map, "TriggerActivation").SetValue("RisingEdge");
+    // 2. Set exposure mode to "TriggerWidth"
+    CEnumParameter(right_node_map, "ExposureMode").SetValue("TriggerWidth");
+
+    // Close right camera
+    right_camera_.Close();
 
 }
 
@@ -95,8 +159,7 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
 
     // Check that image was succesfully grabbed
     if(!image_ptr->GrabSucceeded()) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to grab image");
-        return;
+        throw std::runtime_error("Failed to grab image");
     }
 
     // Get camera index
@@ -108,8 +171,7 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
     // Check and set pixel type
     EPixelType pixel_type = image_ptr->GetPixelType();
     if (pixel_type != pixel_type_pylon_) {
-        RCLCPP_ERROR(this->get_logger(), "CAMERA %d: incorrect pixel type (%d)", camera_index, pixel_type);
-        return;
+        throw std::runtime_error("Camera " + std::to_string(camera_index) + " uses incorrect pixel type: " + std::to_string(pixel_type));
     }
     cv_image.encoding = pixel_type_cv_;
 
@@ -122,8 +184,7 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
     // Get number of bytes per row
     size_t bytes_per_row;
     if (!image_ptr->GetStride(bytes_per_row)) {
-        RCLCPP_ERROR(this->get_logger(), "CAMERA %d: failed to get stride", camera_index);
-        return;
+        throw std::runtime_error("Camera " + std::to_string(camera_index) + " failed to get stride");
     }
 
     // Convert pylon image to OpenCV image
@@ -145,7 +206,7 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
         RCLCPP_INFO(this->get_logger(), "Published right image");
     }
     else {
-        RCLCPP_ERROR(this->get_logger(), "Camera index is %d, does not match 0 or 1", camera_index);
+        throw std::runtime_error("Camera index " + std::to_string(camera_index) + " does not match 0 or 1");
     }
 
 }
