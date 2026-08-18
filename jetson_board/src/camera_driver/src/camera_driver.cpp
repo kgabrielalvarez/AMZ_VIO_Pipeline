@@ -14,8 +14,25 @@ camera_driver::camera_driver() : Node("camera_driver") {
         // Set up cameras
         configure_cameras();
 
+        // Delay
+        // const std::chrono::nanoseconds sleep_time = std::chrono::nanoseconds(1000000000);
+        // rclcpp::sleep_for(sleep_time);
+
+        INodeMap& nodemap = left_camera_.GetNodeMap();
+        std::cout << "2nd TriggerSelector = " << CEnumParameter(nodemap, "TriggerSelector").GetValue() << std::endl;
+        std::cout << "2nd TriggerMode = " << CEnumParameter(nodemap, "TriggerMode").GetValue() << std::endl;
+        std::cout << "2nd TriggerSource = " << CEnumParameter(nodemap, "TriggerSource").GetValue() << std::endl;
+        std::cout << "2nd TriggerActivation = " << CEnumParameter(nodemap, "TriggerActivation").GetValue() << std::endl;
+        std::cout << "2nd ExposureMode = " << CEnumParameter(nodemap, "ExposureMode").GetValue() << std::endl;
+        
         // Start getting images
-        cameras_.StartGrabbing();
+        left_camera_.StartGrabbing(); // TODO CHANGE TO cameras_ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        std::cout << "3rd TriggerSelector = " << CEnumParameter(nodemap, "TriggerSelector").GetValue() << std::endl;
+        std::cout << "3rd TriggerMode = " << CEnumParameter(nodemap, "TriggerMode").GetValue() << std::endl;
+        std::cout << "3rd TriggerSource = " << CEnumParameter(nodemap, "TriggerSource").GetValue() << std::endl;
+        std::cout << "3rd TriggerActivation = " << CEnumParameter(nodemap, "TriggerActivation").GetValue() << std::endl;
+        std::cout << "3rd ExposureMode = " << CEnumParameter(nodemap, "ExposureMode").GetValue() << std::endl;
 
         // Start thread to read images
         image_reader_thread_ = std::thread(&camera_driver::read_images, this);
@@ -51,35 +68,27 @@ void camera_driver::read_images() {
     // for the pointers public functions
     CGrabResultPtr ptrGrabResult;
 
-    bool status;
-    bool wait_status;
-    left_camera_.Open();
-    INodeMap& left_node_map = left_camera_.GetNodeMap();
-
-    while (rclcpp::ok() && cameras_.IsGrabbing()) {
+    while (rclcpp::ok() && left_camera_.IsGrabbing()) { // TODO FIX THIS BACK TO cameras_ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         try {
+
+            INodeMap& nodemap = left_camera_.GetNodeMap();
+            CEnumParameter(nodemap, "LineSelector").SetValue("Line2");
+            bool status = CBooleanParameter(nodemap, "LineStatus").GetValue();
+            RCLCPP_INFO(this->get_logger(), "status = %i", status);
+
             // Get image
-            cameras_.RetrieveResult(retrieve_result_timeout_, ptrGrabResult, TimeoutHandling_ThrowException);
+            std::cout << "TriggerSelector = " << CEnumParameter(nodemap, "TriggerSelector").GetValue() << std::endl;
+            std::cout << "TriggerMode = " << CEnumParameter(nodemap, "TriggerMode").GetValue() << std::endl;
+            std::cout << "TriggerSource = " << CEnumParameter(nodemap, "TriggerSource").GetValue() << std::endl;
+            std::cout << "TriggerActivation = " << CEnumParameter(nodemap, "TriggerActivation").GetValue() << std::endl;
+            std::cout << "ExposureMode = " << CEnumParameter(nodemap, "ExposureMode").GetValue() << std::endl;
+            RCLCPP_INFO(this->get_logger(), "Reached retrieveResult");
+            left_camera_.RetrieveResult(retrieve_result_timeout_, ptrGrabResult, TimeoutHandling_ThrowException);
+            RCLCPP_INFO(this->get_logger(), "Passed retrieveResult");
 
             // Convert from Pylon to OpenCV format and publish
             convert_pylon_to_ros(ptrGrabResult);
-
-            // CEnumParameter(left_node_map, "LineSelector").SetValue("Line2");
-            // status = CBooleanParameter(left_node_map, "LineStatus").GetValue();
-            // CEnumParameter(left_node_map, "AcquisitionStatusSelector").SetValue("ExposureTriggerWait");
-            // wait_status = CBooleanParameter(left_node_map, "AcquisitionStatus").GetValue();
-            // RCLCPP_INFO(this->get_logger(), "LineStatus = %i", status);
-            // RCLCPP_INFO(this->get_logger(), "Can wait for frame trig ready = %i", left_camera_.CanWaitForFrameTriggerReady());
-            // RCLCPP_INFO(this->get_logger(), "Camera is grabbing = %i", left_camera_.IsGrabbing());
-            // RCLCPP_INFO(this->get_logger(), "Exposure trigger wait = %i", wait_status);
-
-
-            // CEnumParameter(left_node_map, "AcquisitionStatusSelector").SetValue("AcquisitionActive");
-            // bool acquisitionAct = CBooleanParameter(left_node_map, "AcquisitionStatus").GetValue();
-            // RCLCPP_INFO(this->get_logger(), "Acquisition Active = %i", acquisitionAct);
-            // left_camera_.WaitForFrameTriggerReady(5000);
-            // RCLCPP_INFO(this->get_logger(), "Frame trig is ready");
 
         }
 
@@ -96,8 +105,6 @@ void camera_driver::read_images() {
         }
 
     }
-
-    left_camera_.Close();
 
 }
 
@@ -139,74 +146,23 @@ void camera_driver::configure_cameras() {
     // Configure input and output lines
     CEnumParameter(left_node_map, "LineSelector").SetValue("Line2");
     CEnumParameter(left_node_map, "LineMode").SetValue("Input");
-    // CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
-    // CEnumParameter(left_node_map, "LineMode").SetValue("Output");
 
     // Configure line 2 for hardware triggering:
     // 1. Set trigger to initiate frame start
-    // CEnumParameter(left_node_map, "TriggerSelector").SetValue("FrameActive");
-    // std::cout << "TriggerSelector = " << CEnumParameter(left_node_map, "TriggerSelector").GetValue() << std::endl;
-    // CEnumParameter(left_node_map, "TriggerMode").SetValue("On");
-    // std::cout << "TriggerMode = " << CEnumParameter(left_node_map, "TriggerMode").GetValue() << std::endl;
-    // CEnumParameter(left_node_map, "TriggerSource").SetValue("Line2");
-    // std::cout << "TriggerSource = " << CEnumParameter(left_node_map, "TriggerSource").GetValue() << std::endl;
-    // // CEnumParameter(left_node_map, "TriggerActivation").SetValue("RisingEdge");
-    // // std::cout << "TriggerActivation = " << CEnumParameter(left_node_map, "TriggerActivation").GetValue() << std::endl;
-    // // 2. Set exposure mode to "TriggerWidth"
-    // CEnumParameter(left_node_map, "ExposureMode").SetValue("TriggerWidth");
-    // std::cout << "ExposureMode = " << CEnumParameter(left_node_map, "ExposureMode").GetValue() << std::endl;
-
-    CEnumParameter(left_node_map, "ExposureMode").SetValue("TriggerControlled");
-    std::cout << "ExposureMode = " << CEnumParameter(left_node_map, "ExposureMode").GetValue() << std::endl;
-
-    CEnumParameter(left_node_map, "TriggerSelector").SetValue("ExposureStart");
-    std::cout << "TriggerSelector = " << CEnumParameter(left_node_map, "TriggerSelector").GetValue() << std::endl;
-    CEnumParameter(left_node_map, "TriggerMode").SetValue("On");
-    std::cout << "TriggerMode = " << CEnumParameter(left_node_map, "TriggerMode").GetValue() << std::endl;
-        CEnumParameter(left_node_map, "TriggerSource").SetValue("Line2");
-    std::cout << "TriggerSource = " << CEnumParameter(left_node_map, "TriggerSource").GetValue() << std::endl;
-    CEnumParameter(left_node_map, "TriggerActivation").SetValue("RisingEdge");
-    std::cout << "TriggerActivation = " << CEnumParameter(left_node_map, "TriggerActivation").GetValue() << std::endl;
-
-    CEnumParameter(left_node_map, "TriggerSelector").SetValue("ExposureEnd");
+    CEnumParameter(left_node_map, "TriggerSelector").SetValue("FrameStart");
     std::cout << "TriggerSelector = " << CEnumParameter(left_node_map, "TriggerSelector").GetValue() << std::endl;
     CEnumParameter(left_node_map, "TriggerMode").SetValue("On");
     std::cout << "TriggerMode = " << CEnumParameter(left_node_map, "TriggerMode").GetValue() << std::endl;
     CEnumParameter(left_node_map, "TriggerSource").SetValue("Line2");
     std::cout << "TriggerSource = " << CEnumParameter(left_node_map, "TriggerSource").GetValue() << std::endl;
-    CEnumParameter(left_node_map, "TriggerActivation").SetValue("FallingEdge");
+    CEnumParameter(left_node_map, "TriggerActivation").SetValue("RisingEdge");
     std::cout << "TriggerActivation = " << CEnumParameter(left_node_map, "TriggerActivation").GetValue() << std::endl;
-
-    // PRINT EXPOSURE TIME
-    double exp_time = CFloatParameter(left_node_map, "ExposureTime").GetValue();
-    RCLCPP_INFO(this->get_logger(), "MEASURED EXPOSURE TIME = %f", exp_time);
-
-    // Configure line 3 for exposure active signal:
-    // CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
-    // CEnumParameter(left_node_map, "LineSource").SetValue("ExposureActive");
+    // 2. Set exposure mode to "TriggerWidth"
+    CEnumParameter(left_node_map, "ExposureMode").SetValue("TriggerWidth");
+    std::cout << "ExposureMode = " << CEnumParameter(left_node_map, "ExposureMode").GetValue() << std::endl;
 
     // Close left camera
-    left_camera_.Close();
-
-    // // Configure right camera
-    // right_camera_.Open();
-    // INodeMap& right_node_map = right_camera_.GetNodeMap();
-
-    // // Configure input lines
-    // CEnumParameter(right_node_map, "LineSelector").SetValue("Line2");
-    // CEnumParameter(right_node_map, "LineMode").SetValue("Input");
-
-    // // Configure line 2 for hardware triggering:
-    // // 1. Set trigger to initiate frame start
-    // CEnumParameter(right_node_map, "TriggerSelector").SetValue("FrameStart");
-    // CEnumParameter(right_node_map, "TriggerMode").SetValue("On");
-    // CEnumParameter(right_node_map, "TriggerSource").SetValue("Line2");
-    // CEnumParameter(right_node_map, "TriggerActivation").SetValue("RisingEdge");
-    // // 2. Set exposure mode to "TriggerWidth"
-    // CEnumParameter(right_node_map, "ExposureMode").SetValue("TriggerWidth");
-
-    // // Close right camera
-    // right_camera_.Close();
+    // left_camera_.Close();
 
 }
 
