@@ -217,26 +217,15 @@ int main(void)
   while (1)
   {
 
-	  if (drdy_event) {
-		  drdy_event = 0;
-		  read_measurements(acceleration_mg, angular_rate_mdps);
+	  HAL_GPIO_WritePin(IMU_INT2_GPIO_Port, IMU_INT2_Pin, GPIO_PIN_SET);
+	  while (drdy_event == 0) {
+		  // Wait for interrupt to be triggered
 	  }
+	  HAL_GPIO_WritePin(IMU_INT2_GPIO_Port, IMU_INT2_Pin, GPIO_PIN_RESET);
+	  drdy_event = 0;
+	  read_measurements(acceleration_mg, angular_rate_mdps);;
 
-	  if (triggering_board_active) {
-		  memcpy(&TxData3[0], &acceleration_mg[0], 4);
-		  memcpy(&TxData3[4], &acceleration_mg[1], 4);
-		  memcpy(&TxData3[8], &acceleration_mg[2], 4);
-		  memcpy(&TxData3[12], &angular_rate_mdps[0], 4);
-		  memcpy(&TxData3[16], &angular_rate_mdps[1], 4);
-		  memcpy(&TxData3[20], &angular_rate_mdps[2], 4);
-		  timestamp = HAL_GetTick();
-		  memcpy(&TxData3[24], &timestamp, 4);
-		  if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3)!= HAL_OK)
-		  {
-			Error_Handler();
-		  }
-	  }
-	  HAL_Delay (1000);
+	  HAL_Delay(100);
 
     /* USER CODE END WHILE */
 
@@ -470,7 +459,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, TRIGGER_Pin|CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, IMU_INT2_Pin|DEBUG_LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PWR_FLAG_Pin */
   GPIO_InitStruct.Pin = PWR_FLAG_Pin;
@@ -491,10 +480,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(EXP_ACT_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : IMU_INT2_Pin DEBUG_LED_Pin */
+  GPIO_InitStruct.Pin = IMU_INT2_Pin|DEBUG_LED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
   /*Configure GPIO pin : IMU_INT1_Pin */
   GPIO_InitStruct.Pin = IMU_INT1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(IMU_INT1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : VSENSE_Pin */
@@ -502,13 +498,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(VSENSE_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : DEBUG_LED_Pin */
-  GPIO_InitStruct.Pin = DEBUG_LED_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(DEBUG_LED_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);

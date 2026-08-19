@@ -20,7 +20,7 @@ extern SPI_HandleTypeDef hspi2;
 int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len);
 int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len);
 void platform_delay(uint32_t ms);
-void configure_imu(void);
+void configure_imu();
 void asm330lhhxg1_read_data_irq_handler(void);
 void read_measurements();
 
