@@ -3,19 +3,28 @@
 // Constructor
 can_driver::can_driver() : Node("can_driver") {
 
-    // Initialize Publisher
+    // Declare parameters
+    this->declare_parameter("camera_rate", 0); // [FPS]
+    this->declare_parameter("imu_rate", 0); // [Hz]
+
+    // Initialize publisher
     publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu_and_timestamps", 10);
-    // Initialize Subscriber
-    subscriber_ = this->create_subscription<std_msgs::msg::Bool>("triggering_board_active", 
+    // Initialize subscriber
+    subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
         10, std::bind(&can_driver::subscriber_callback, this, std::placeholders::_1));
 
-    // Assign values to start and stop frames
-    start_triggering_board_frame_.can_id = 0x001;
-    start_triggering_board_frame_.len = 1;
-    start_triggering_board_frame_.data[0] = 0x01;
+    // Assign values to stop frame
     stop_triggering_board_frame_.can_id = 0x001;
     stop_triggering_board_frame_.len = 1;
     stop_triggering_board_frame_.data[0] = 0x00;
+    // Assign values to cal frame
+    cal_triggering_board_frame_.can_id = 0x001;
+    cal_triggering_board_frame_.len = 1;
+    cal_triggering_board_frame_.data[0] = 0x01;
+    // Assign values to run frame
+    run_triggering_board_frame_.can_id = 0x001;
+    run_triggering_board_frame_.len = 1;
+    run_triggering_board_frame_.data[0] = 0x02;
 
     // Print start of node
     RCLCPP_INFO(this->get_logger(), "can_driver started...");
@@ -25,7 +34,7 @@ can_driver::can_driver() : Node("can_driver") {
 // Destructor
 can_driver::~can_driver() {
 
-    run_triggering_board_.store(false);
+    triggering_board_state_ = triggering_board_state::STOP;
     this->stop_triggering_board();
 
 }
@@ -35,7 +44,8 @@ void can_driver::read_can() {
     // Print start of CAN thread
     RCLCPP_INFO(this->get_logger(), "CAN thread started...");
 
-    while (run_triggering_board_.load()) {
+    while ((triggering_board_state_ == triggering_board_state::CAL) ||
+           (triggering_board_state_ == triggering_board_state::RUN)) {
 
         // Read CAN frame
         num_bytes_read_ = read(socket_, &frame_, sizeof(struct canfd_frame));
@@ -47,8 +57,12 @@ void can_driver::read_can() {
 
         // Check that we received a complete CAN frame
         if (num_bytes_read_ < sizeof(struct canfd_frame)) {
-            RCLCPP_ERROR(this->get_logger(), "Error: incomplete CAN frame\n");
+            RCLCPP_ERROR(this->get_logger(), "Incomplete CAN frame\n");
         }
+
+        // Define timeout for CAN read
+        timeout_.tv_sec = 0;
+        timeout_.tv_usec = 100000;
 
         // Convert uint8_t to float
         std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], 4);
@@ -89,10 +103,12 @@ void can_driver::read_can() {
 
 }
 
-void can_driver::start_triggering_board() {
+void can_driver::start_and_calibrate_triggering_board() {
 
     // Define socket
     socket_ = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+    // Set socket timeout
+    setsockopt(socket_, SOL_SOCKET, SO_RCVTIMEO, &timeout_, sizeof(timeout_));
     // Configure socket to use CAN FD
     if (setsockopt(socket_, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &enable_can_fd_, sizeof(enable_can_fd_)) < 0) {
         perror("Error setting socket options");
@@ -107,21 +123,39 @@ void can_driver::start_triggering_board() {
     can_socket_address_.can_ifindex = interface_.ifr_ifindex;
     // Bind native socket (hardware) to can socket address (software)
     if (bind(socket_, (struct sockaddr*) &can_socket_address_, sizeof(can_socket_address_)) < 0) {
-        RCLCPP_ERROR(this->get_logger(), "Error in binding socket");
+        RCLCPP_ERROR(this->get_logger(), "Failed to bind socket");
     }
 
     // Start thread to read CAN bus
     can_reader_thread_ = std::thread(&can_driver::read_can, this);
     
-    // Send triggering board command to start running
-    num_bytes_write_ = write(socket_, &start_triggering_board_frame_, sizeof(struct canfd_frame));
+    // Send triggering board command to enter calibration state
+    num_bytes_write_ = write(socket_, &cal_triggering_board_frame_, sizeof(struct canfd_frame));
 
     // Check that we didn't get an error
     if (num_bytes_write_ < 0) {
-        perror("Error writing start_triggering_board_frame_ to CAN Bus");
+        perror("Error writing cal_triggering_board_frame_ to CAN Bus");
     }
 
     // TO-DO: confirm that STM32 started publishing
+
+    // Notify
+    RCLCPP_INFO(this->get_logger(), "Triggering board entering calibration state");
+
+}
+
+void can_driver::run_triggering_board() {
+
+    // Send triggering board command to enter run state
+    num_bytes_write_ = write(socket_, &run_triggering_board_frame_, sizeof(struct canfd_frame));
+
+    // Check that we didn't get an error
+    if (num_bytes_write_ < 0) {
+        perror("Error writing run_triggering_board_frame_ to CAN Bus");
+    }
+
+    // Notify
+    RCLCPP_INFO(this->get_logger(), "Triggering board entering run state");
 
 }
 
@@ -145,21 +179,50 @@ void can_driver::stop_triggering_board() {
     // Close the socket
     close(socket_);
 
-    // Notify t
+    // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board stopped, CAN Bus closed");
 
 }
 
-void can_driver::subscriber_callback(const std_msgs::msg::Bool::SharedPtr msg) {
+void can_driver::subscriber_callback(const std_msgs::msg::UInt8::SharedPtr msg) {
 
-    // Enable or disable flag for can_reader_thread_ to run continuously
-    run_triggering_board_.store(msg->data);
+    // Save previous state
+    triggering_board_state triggering_board_previous_state = triggering_board_state_;
 
-    if (run_triggering_board_.load()) {
-        this->start_triggering_board();
-    }
-    else {
-        this->stop_triggering_board();
+    // Update current state
+    triggering_board_state_ = static_cast<triggering_board_state>(msg->data);
+
+    // Transition to commanded state
+    switch(triggering_board_state_) {
+
+        case triggering_board_state::STOP:
+            // Check that triggering board was not in CAL or RUN state before stopping
+            if ((triggering_board_previous_state != triggering_board_state::CAL) &&
+                (triggering_board_previous_state != triggering_board_state::RUN)) {
+                    RCLCPP_ERROR(this->get_logger(), "Trying to stop triggering board but it wasn't in RUN or CAL states");
+            }
+            this->stop_triggering_board();
+            break;
+
+        case triggering_board_state::CAL:
+            this->start_and_calibrate_triggering_board();
+            break;
+
+        case triggering_board_state::RUN:
+            // Check that triggering board was started before running
+            if (triggering_board_previous_state != triggering_board_state::CAL) {
+                RCLCPP_ERROR(this->get_logger(), "Trying to run triggering board but it wasn't in CAL state");
+            }
+            // Update camera and imu rates
+            camera_rate_ = this->get_parameter("camera_rate").as_int();
+            imu_rate_ = this->get_parameter("imu_rate").as_int();
+            this->run_triggering_board();
+            break;
+
+        default:
+            RCLCPP_ERROR(this->get_logger(), "triggering_board_state_ not valid");
+            break;
+
     }
 
 }

@@ -12,7 +12,7 @@
 
 // Include ROS2 libraries
 #include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/u_int8.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 
 // Type for converting uint8_t to float
@@ -20,6 +20,13 @@ union bytes_to_float_t {
     uint8_t as_bytes[4];
     float as_float;
     uint32_t as_uint32;
+};
+
+// Triggering board state
+enum class triggering_board_state : uint8_t {
+    STOP = 0,   // Triggering board not active
+    CAL = 1,    // Calibration mode, used to synchronize camera and IMU data
+    RUN = 2     // Nominal mode
 };
 
 // Driver to connect CAN to ROS2
@@ -43,12 +50,12 @@ class can_driver : public rclcpp::Node {
         std::string can_socket_name_ = "can0";
         struct ifreq interface_;
         int socket_;
+        struct timeval timeout_;
         int enable_can_fd_ = 1;
         struct sockaddr_can can_socket_address_;
 
         // read_can() thread
         std::thread can_reader_thread_;
-        std::atomic<bool> run_triggering_board_;
         struct canfd_frame frame_;
         ssize_t num_bytes_read_;
 
@@ -70,18 +77,28 @@ class can_driver : public rclcpp::Node {
 
         // Write to CAN Bus
         ssize_t num_bytes_write_;
-        struct canfd_frame start_triggering_board_frame_;
         struct canfd_frame stop_triggering_board_frame_;
+        struct canfd_frame cal_triggering_board_frame_;
+        struct canfd_frame run_triggering_board_frame_;
+
+        // Camera and IMU rates
+        int camera_rate_; // [FPS]
+        int camera_calibration_rate_; // [FPS]
+        int imu_rate_; // [Hz]
+
+        // Triggering board state
+        triggering_board_state triggering_board_state_;
 
         // Publisher & Subscriber
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher_;
-        rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr subscriber_;
+        rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr subscriber_;
 
         // Methods
         void read_can();
-        void start_triggering_board();
+        void start_and_calibrate_triggering_board();
+        void run_triggering_board();
         void stop_triggering_board();
-        void subscriber_callback(const std_msgs::msg::Bool::SharedPtr msg);
+        void subscriber_callback(const std_msgs::msg::UInt8::SharedPtr msg);
 
 };
 
