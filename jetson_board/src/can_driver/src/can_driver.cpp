@@ -26,6 +26,10 @@ can_driver::can_driver() : Node("can_driver") {
     run_triggering_board_frame_.len = RUN_FRAME_LENGTH;
     run_triggering_board_frame_.data[0] = static_cast<uint8_t>(triggering_board_state::RUN);
 
+    // Define socket timeout
+    timeout_.tv_sec = 0;
+    timeout_.tv_usec = 100000;
+
     // Print start of node
     RCLCPP_INFO(this->get_logger(), "can_driver started...");
 
@@ -59,10 +63,6 @@ void can_driver::read_can() {
         if (num_bytes_read_ < sizeof(struct canfd_frame)) {
             RCLCPP_ERROR(this->get_logger(), "Incomplete CAN frame\n");
         }
-
-        // Define timeout for CAN read
-        timeout_.tv_sec = 0;
-        timeout_.tv_usec = 100000;
 
         // Convert uint8_t to float
         std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], 4);
@@ -145,6 +145,7 @@ void can_driver::start_and_calibrate_triggering_board() {
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board entering calibration state");
+    RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", imu_rate_, camera_calibration_rate_);
 
 }
 
@@ -164,6 +165,7 @@ void can_driver::run_triggering_board() {
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board entering run state");
+    RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", imu_rate_, camera_rate_);
 
 }
 

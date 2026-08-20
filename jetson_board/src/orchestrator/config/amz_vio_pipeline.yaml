@@ -1,0 +1,4 @@
+can_driver:
+  ros__parameters:
+    imu_rate: 200 # Hz 
+    camera_rate: 50 # FPS
