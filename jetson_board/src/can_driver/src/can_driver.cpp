@@ -14,17 +14,17 @@ can_driver::can_driver() : Node("can_driver") {
         10, std::bind(&can_driver::subscriber_callback, this, std::placeholders::_1));
 
     // Assign values to stop frame
-    stop_triggering_board_frame_.can_id = 0x001;
-    stop_triggering_board_frame_.len = 1;
-    stop_triggering_board_frame_.data[0] = 0x00;
+    stop_triggering_board_frame_.can_id = CAN_ID;
+    stop_triggering_board_frame_.len = STOP_FRAME_LENGTH;
+    stop_triggering_board_frame_.data[0] = static_cast<uint8_t>(triggering_board_state::STOP);
     // Assign values to cal frame
-    cal_triggering_board_frame_.can_id = 0x001;
-    cal_triggering_board_frame_.len = 1;
-    cal_triggering_board_frame_.data[0] = 0x01;
+    cal_triggering_board_frame_.can_id = CAN_ID;
+    cal_triggering_board_frame_.len = CAL_FRAME_LENGTH;
+    cal_triggering_board_frame_.data[0] = static_cast<uint8_t>(triggering_board_state::CAL);
     // Assign values to run frame
-    run_triggering_board_frame_.can_id = 0x001;
-    run_triggering_board_frame_.len = 1;
-    run_triggering_board_frame_.data[0] = 0x02;
+    run_triggering_board_frame_.can_id = CAN_ID;
+    run_triggering_board_frame_.len = RUN_FRAME_LENGTH;
+    run_triggering_board_frame_.data[0] = static_cast<uint8_t>(triggering_board_state::RUN);
 
     // Print start of node
     RCLCPP_INFO(this->get_logger(), "can_driver started...");
@@ -128,6 +128,10 @@ void can_driver::start_and_calibrate_triggering_board() {
 
     // Start thread to read CAN bus
     can_reader_thread_ = std::thread(&can_driver::read_can, this);
+
+    // Add IMU and camera rate to CAN message
+    std::memcpy(&cal_triggering_board_frame_.data[1], &imu_rate_, INT_LENGTH);
+    std::memcpy(&cal_triggering_board_frame_.data[5], &camera_calibration_rate_, INT_LENGTH);
     
     // Send triggering board command to enter calibration state
     num_bytes_write_ = write(socket_, &cal_triggering_board_frame_, sizeof(struct canfd_frame));
@@ -145,6 +149,10 @@ void can_driver::start_and_calibrate_triggering_board() {
 }
 
 void can_driver::run_triggering_board() {
+
+    // Add IMU and camera rate to CAN message
+    std::memcpy(&run_triggering_board_frame_.data[1], &imu_rate_, INT_LENGTH);
+    std::memcpy(&run_triggering_board_frame_.data[5], &camera_rate_, INT_LENGTH);
 
     // Send triggering board command to enter run state
     num_bytes_write_ = write(socket_, &run_triggering_board_frame_, sizeof(struct canfd_frame));
@@ -205,6 +213,13 @@ void can_driver::subscriber_callback(const std_msgs::msg::UInt8::SharedPtr msg) 
             break;
 
         case triggering_board_state::CAL:
+            // Update IMU rate
+            imu_rate_ = this->get_parameter("imu_rate").as_int();
+            // Check that IMU rate is within bounds
+            if (imu_rate_ > imu_rate_max_) {
+                RCLCPP_ERROR(this->get_logger(), "IMU rate (%d Hz) is above max IMU rate (%d Hz)", 
+                imu_rate_, imu_rate_max_);
+            }
             this->start_and_calibrate_triggering_board();
             break;
 
@@ -213,9 +228,28 @@ void can_driver::subscriber_callback(const std_msgs::msg::UInt8::SharedPtr msg) 
             if (triggering_board_previous_state != triggering_board_state::CAL) {
                 RCLCPP_ERROR(this->get_logger(), "Trying to run triggering board but it wasn't in CAL state");
             }
-            // Update camera and imu rates
-            camera_rate_ = this->get_parameter("camera_rate").as_int();
+            // Update IMU and camera rates
             imu_rate_ = this->get_parameter("imu_rate").as_int();
+            camera_rate_ = this->get_parameter("camera_rate").as_int();
+            // Check that IMU rate is within bounds
+            if (imu_rate_ > imu_rate_max_) {
+                RCLCPP_ERROR(this->get_logger(), "IMU rate (%d Hz) is above max IMU rate (%d Hz)", 
+                imu_rate_, imu_rate_max_);
+            }
+            // Check that camera rate is within bounds
+            if (camera_rate_ < camera_rate_min_) {
+                RCLCPP_ERROR(this->get_logger(), "Camera rate (%d FPS) is below min camera rate (%d FPS)", 
+                camera_rate_, camera_rate_min_);
+            }
+            if (camera_rate_ > camera_rate_max_) {
+                RCLCPP_ERROR(this->get_logger(), "Camera rate (%d FPS) is above max camera rate (%d FPS)", 
+                camera_rate_, camera_rate_max_);
+            }
+            // Check that IMU rate is a multiple of camera rate
+            if ((imu_rate_ % camera_rate_) != 0) {
+                RCLCPP_ERROR(this->get_logger(), "IMU rate (%d Hz) is not a multiple of camera rate (%d FPS)", 
+                imu_rate_, camera_rate_);
+            }
             this->run_triggering_board();
             break;
 

@@ -5,6 +5,12 @@
 #ifndef can_driver_h
 #define can_driver_h
 
+#define CAN_ID              0x001
+#define STOP_FRAME_LENGTH       1 // state (1 byte)
+#define CAL_FRAME_LENGTH        9 // state (1 byte) + imu_rate (4 bytes) + camera_rate (4 bytes)
+#define RUN_FRAME_LENGTH        9 // state (1 byte) + imu_rate (4 bytes) + camera_rate (4 bytes)
+#define INT_LENGTH              4 // [bytes]
+
 // Include CAN specific Libraries
 #include "linux/can/raw.h"
 #include <sys/ioctl.h>
@@ -83,8 +89,13 @@ class can_driver : public rclcpp::Node {
 
         // Camera and IMU rates
         int camera_rate_; // [FPS]
-        int camera_calibration_rate_; // [FPS]
+        int camera_calibration_rate_ = 25; // [FPS]
         int imu_rate_; // [Hz]
+
+        // Camera and IMU rate bounds
+        int imu_rate_max_ = 833; // [Hz] this is the frequency that the IMU is sampling at
+        int camera_rate_max_ = 168; // [FPS] max frame rate that the camera can achieve: https://www.baslerweb.com/en/shop/a2a1920-168mgc/
+        int camera_rate_min_ = 20; // [FPS] TO-DO: think about this more deeply, I just made this up 
 
         // Triggering board state
         triggering_board_state triggering_board_state_;
