@@ -32,6 +32,10 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "stdbool.h"
+#include "asm330lhh.h"
+//#include "can.h"
+
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -63,6 +67,8 @@ void Error_Handler(void);
 #define TRIGGER_GPIO_Port GPIOA
 #define EXP_ACT_Pin GPIO_PIN_6
 #define EXP_ACT_GPIO_Port GPIOA
+#define IMU_INT2_Pin GPIO_PIN_2
+#define IMU_INT2_GPIO_Port GPIOB
 #define IMU_INT1_Pin GPIO_PIN_11
 #define IMU_INT1_GPIO_Port GPIOB
 #define IMU_INT1_EXTI_IRQn EXTI15_10_IRQn

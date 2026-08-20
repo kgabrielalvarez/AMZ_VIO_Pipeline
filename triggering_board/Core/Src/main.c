@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "asm330lhh.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,12 +70,29 @@ float_t acceleration_mg[3];
 float_t angular_rate_mdps[3];
 uint8_t drdy_event;
 
+// Current time
+uint32_t timestamp;
+
 // IMU interrupt callback
 __weak void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == IMU_INT1_Pin) {
 		drdy_event = 1;
 	}
 }
+
+// CAN variables
+FDCAN_FilterTypeDef sFilterConfig;
+FDCAN_TxHeaderTypeDef   TxHeader2;
+FDCAN_RxHeaderTypeDef   RxHeader2;
+uint8_t               TxData2[8];
+uint8_t               RxData2[8];
+FDCAN_TxHeaderTypeDef   TxHeader3;
+FDCAN_RxHeaderTypeDef   RxHeader3;
+uint8_t               TxData3[32];
+uint8_t               RxData3[32];
+
+// Flag to indicate whether triggering board is active or not
+bool triggering_board_active = false;
 
 /* USER CODE END 0 */
 
@@ -115,6 +132,83 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   configure_imu();
+//  fdcan_config();
+
+  // Configure fdcan2
+  sFilterConfig.IdType = FDCAN_STANDARD_ID;
+  sFilterConfig.FilterIndex = 0;
+  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  sFilterConfig.FilterID1 = 0x22;
+  sFilterConfig.FilterID2 = 0x22;
+  if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK)
+  {
+    /* Filter configuration Error */
+    Error_Handler();
+  }
+
+  // Configure fdcan3
+  sFilterConfig.IdType = FDCAN_STANDARD_ID;
+  sFilterConfig.FilterIndex = 0;
+  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
+  sFilterConfig.FilterID1 = 0x001;
+  sFilterConfig.FilterID2 = 0x7FF;
+  if (HAL_FDCAN_ConfigFilter(&hfdcan3, &sFilterConfig) != HAL_OK)
+  {
+    /* Filter configuration Error */
+    Error_Handler();
+  }
+
+  // STart fdcan2
+  if(HAL_FDCAN_Start(&hfdcan2)!= HAL_OK)
+  {
+   Error_Handler();
+  }
+
+  // STart fdcan3
+  if(HAL_FDCAN_Start(&hfdcan3)!= HAL_OK)
+  {
+   Error_Handler();
+  }
+
+  // Activate the notification for new data in FIFO0 for fdcan2
+  if (HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
+  {
+    /* Notification Error */
+    Error_Handler();
+  }
+
+
+  // Activate the notification for new data in FIFO1 for fdcan3
+  if (HAL_FDCAN_ActivateNotification(&hfdcan3, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK)
+  {
+    /* Notification Error */
+    Error_Handler();
+  }
+
+  // Configure TX Header for fdcan2
+  TxHeader2.Identifier = 0x11;
+  TxHeader2.IdType = FDCAN_STANDARD_ID;
+  TxHeader2.TxFrameType = FDCAN_DATA_FRAME;
+  TxHeader2.DataLength = FDCAN_DLC_BYTES_8;
+  TxHeader2.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  TxHeader2.BitRateSwitch = FDCAN_BRS_OFF;
+  TxHeader2.FDFormat = FDCAN_CLASSIC_CAN;
+  TxHeader2.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  TxHeader2.MessageMarker = 0;
+
+
+  // Configure TX Header for fdcan3
+  TxHeader3.Identifier = 0x002;
+  TxHeader3.IdType = FDCAN_STANDARD_ID;
+  TxHeader3.TxFrameType = FDCAN_DATA_FRAME;
+  TxHeader3.DataLength = FDCAN_DLC_BYTES_32;
+  TxHeader3.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  TxHeader3.BitRateSwitch = FDCAN_BRS_OFF;
+  TxHeader3.FDFormat = FDCAN_FD_CAN;
+  TxHeader3.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  TxHeader3.MessageMarker = 0;
 
   /* USER CODE END 2 */
 
@@ -123,10 +217,15 @@ int main(void)
   while (1)
   {
 
-	  if (drdy_event) {
-		  drdy_event = 0;
-		  read_measurements(acceleration_mg, angular_rate_mdps);
+	  HAL_GPIO_WritePin(IMU_INT2_GPIO_Port, IMU_INT2_Pin, GPIO_PIN_SET);
+	  while (drdy_event == 0) {
+		  // Wait for interrupt to be triggered
 	  }
+	  HAL_GPIO_WritePin(IMU_INT2_GPIO_Port, IMU_INT2_Pin, GPIO_PIN_RESET);
+	  drdy_event = 0;
+	  read_measurements(acceleration_mg, angular_rate_mdps);;
+
+	  HAL_Delay(100);
 
     /* USER CODE END WHILE */
 
@@ -151,15 +250,14 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV1;
   RCC_OscInitStruct.PLL.PLLN = 12;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV4;
+  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
   RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -170,12 +268,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -203,15 +301,15 @@ static void MX_FDCAN2_Init(void)
   hfdcan2.Init.AutoRetransmission = DISABLE;
   hfdcan2.Init.TransmitPause = DISABLE;
   hfdcan2.Init.ProtocolException = DISABLE;
-  hfdcan2.Init.NominalPrescaler = 16;
-  hfdcan2.Init.NominalSyncJumpWidth = 1;
-  hfdcan2.Init.NominalTimeSeg1 = 2;
-  hfdcan2.Init.NominalTimeSeg2 = 2;
-  hfdcan2.Init.DataPrescaler = 1;
+  hfdcan2.Init.NominalPrescaler = 1;
+  hfdcan2.Init.NominalSyncJumpWidth = 12;
+  hfdcan2.Init.NominalTimeSeg1 = 83;
+  hfdcan2.Init.NominalTimeSeg2 = 12;
+  hfdcan2.Init.DataPrescaler = 24;
   hfdcan2.Init.DataSyncJumpWidth = 1;
-  hfdcan2.Init.DataTimeSeg1 = 1;
+  hfdcan2.Init.DataTimeSeg1 = 2;
   hfdcan2.Init.DataTimeSeg2 = 1;
-  hfdcan2.Init.StdFiltersNbr = 0;
+  hfdcan2.Init.StdFiltersNbr = 1;
   hfdcan2.Init.ExtFiltersNbr = 0;
   hfdcan2.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   if (HAL_FDCAN_Init(&hfdcan2) != HAL_OK)
@@ -241,20 +339,20 @@ static void MX_FDCAN3_Init(void)
   /* USER CODE END FDCAN3_Init 1 */
   hfdcan3.Instance = FDCAN3;
   hfdcan3.Init.ClockDivider = FDCAN_CLOCK_DIV1;
-  hfdcan3.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+  hfdcan3.Init.FrameFormat = FDCAN_FRAME_FD_NO_BRS;
   hfdcan3.Init.Mode = FDCAN_MODE_NORMAL;
   hfdcan3.Init.AutoRetransmission = DISABLE;
   hfdcan3.Init.TransmitPause = DISABLE;
   hfdcan3.Init.ProtocolException = DISABLE;
-  hfdcan3.Init.NominalPrescaler = 16;
-  hfdcan3.Init.NominalSyncJumpWidth = 1;
-  hfdcan3.Init.NominalTimeSeg1 = 2;
-  hfdcan3.Init.NominalTimeSeg2 = 2;
-  hfdcan3.Init.DataPrescaler = 1;
+  hfdcan3.Init.NominalPrescaler = 1;
+  hfdcan3.Init.NominalSyncJumpWidth = 12;
+  hfdcan3.Init.NominalTimeSeg1 = 83;
+  hfdcan3.Init.NominalTimeSeg2 = 12;
+  hfdcan3.Init.DataPrescaler = 24;
   hfdcan3.Init.DataSyncJumpWidth = 1;
-  hfdcan3.Init.DataTimeSeg1 = 1;
+  hfdcan3.Init.DataTimeSeg1 = 2;
   hfdcan3.Init.DataTimeSeg2 = 1;
-  hfdcan3.Init.StdFiltersNbr = 0;
+  hfdcan3.Init.StdFiltersNbr = 1;
   hfdcan3.Init.ExtFiltersNbr = 0;
   hfdcan3.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   if (HAL_FDCAN_Init(&hfdcan3) != HAL_OK)
@@ -361,7 +459,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, TRIGGER_Pin|CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, IMU_INT2_Pin|DEBUG_LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PWR_FLAG_Pin */
   GPIO_InitStruct.Pin = PWR_FLAG_Pin;
@@ -382,10 +480,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(EXP_ACT_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : IMU_INT2_Pin DEBUG_LED_Pin */
+  GPIO_InitStruct.Pin = IMU_INT2_Pin|DEBUG_LED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
   /*Configure GPIO pin : IMU_INT1_Pin */
   GPIO_InitStruct.Pin = IMU_INT1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(IMU_INT1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : VSENSE_Pin */
@@ -393,13 +498,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(VSENSE_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : DEBUG_LED_Pin */
-  GPIO_InitStruct.Pin = DEBUG_LED_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(DEBUG_LED_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
@@ -410,6 +508,54 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+// FDCAN3 Callback
+void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
+{
+  if((RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE) != RESET)
+  {
+    /* Retreive Rx messages from RX FIFO1 */
+    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &RxHeader3, RxData3) != HAL_OK)
+    {
+      /* Reception Error */
+      Error_Handler();
+    }
+
+    // Set flag
+    if (RxData3[0] == 0x01) {
+    	triggering_board_active = true;
+    }
+    else {
+    	triggering_board_active = false;
+    }
+
+    if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK)
+    {
+      /* Notification Error */
+      Error_Handler();
+    }
+  }
+}
+
+
+// FDCAN2 Callback
+void HAL_FDCAN_RxFifo0Callba0k(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+  if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
+  {
+    /* Retreive Rx messages from RX FIFO1 */
+	if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader2, RxData2) != HAL_OK)
+	{
+	  /* Reception Error */
+	  Error_Handler();
+	}
+	if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
+	{
+	  /* Notification Error */
+	  Error_Handler();
+	}
+  }
+}
 
 /* USER CODE END 4 */
 

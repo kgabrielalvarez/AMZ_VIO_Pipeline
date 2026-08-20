@@ -1,6 +1,8 @@
+// Based on the example code from:
+// https://github.com/STMicroelectronics/STMems_Standard_C_drivers/blob/master/asm330lhhxg1_STdC/examples/asm330lhhxg1_read_data_interrupt.c
+
 /* Include -------------------------------------------------------------------*/
 #include "asm330lhh.h"
-#include "string.h"
 
 /* Private variables ---------------------------------------------------------*/
 static int16_t data_raw_acceleration[3];
@@ -56,16 +58,18 @@ void platform_delay(uint32_t ms) {
 }
 
 // @brief Configure IMU
-void configure_imu(void) {
-
-	// Configure INT1
-	asm330lhhxg1_pin_int1_route_t int1_route;
+void configure_imu() {
 
     // Initialize mems driver interface
     dev_ctx.write_reg = platform_write;
     dev_ctx.read_reg = platform_read;
     dev_ctx.mdelay = platform_delay;
     dev_ctx.handle = &hspi2;
+
+	// Initialize variables used to configure DEN
+	asm330lhhxg1_pin_int1_route_t int1_route;
+	asm330lhhxg1_den_mode_t den_mode;
+	asm330lhhxg1_den_lh_t den_lh;
 
     // Wait sensor boot time
     HAL_Delay(BOOT_TIME);
@@ -94,56 +98,75 @@ void configure_imu(void) {
     asm330lhhxg1_xl_full_scale_set(&dev_ctx, ASM330LHHXG1_4g);
     asm330lhhxg1_gy_full_scale_set(&dev_ctx, ASM330LHHXG1_500dps);
 
-    // Generate interrupt on INT1 when accelerometer data is ready
-    asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
-    int1_route.int1_ctrl.int1_drdy_xl = PROPERTY_ENABLE;
-    asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
+    // Configure DEN
+    // DEN procedure:
+    // 1. STM32 sends active high signal to INT2 pin (DEN)
+    // 2. IMU stores measurements in output registers
+    // 3. IMU sends active high signal on INT1 pin
+    // 4. STM32 reads measurements
 
-    // ---------------------- UNCOMMENT FOR DEN ----------------------------------------
-//    // Generate interrupt on INT1 when DEN signal is high (level-sensitive latched mode)
-//    // Set INT1_CTRL register
-//    asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
-//	int1_route.int1_ctrl.den_drdy_flag = PROPERTY_ENABLE;
-//	asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
-//    // Set CTRL6_C register
-//	asm330lhhxg1_den_mode_set(&dev_ctx, ASM330LHHXG1_LEVEL_LETCHED);
-//	// Set CTRL9_XL register: DEN_X, DEN_Y, and DEN_Z bits
-//	asm330lhhxg1_den_mark_axis_x_set(&dev_ctx, 0);
-//	asm330lhhxg1_den_mark_axis_y_set(&dev_ctx, 0);
-//	asm330lhhxg1_den_mark_axis_z_set(&dev_ctx, 1);
-//	// Set CTRL9_XL register: DEN_XL_G bit
-//	asm330lhhxg1_den_enable_set(&dev_ctx, ASM330LHHXG1_STAMP_IN_XL_DATA);
-//	// Set CTRL9_XL register: DEN_XL_EN bit (need to do manually as there is no function to do this)
-//	uint8_t buffer[8];
-//	platform_read(&hspi2, 0x18, buffer, 1);
-//	buffer[0] = buffer[0] | 0x08;
-//	platform_write(&hspi2, 0x18, buffer, 1);
-//	// NOTE: REMEMBER THAT THE DEN_LH LINE NEEDS TO BE CONFIGURED ACCORDING TO HOW THE
-//	// DEN PIN IS TRIGGERED BY THE MICROCONTROLLER --> EITHER ACTIVE HIGH OR ACTIVE LOW
+    // Set INT1_CTRL register to trigger data ready (DRDY) flag when DEN is triggered
+    asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
+	int1_route.int1_ctrl.den_drdy_flag = PROPERTY_ENABLE;
+	asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
+
+	// Set DEN to be in "level latched" mode in CTRL6_C register
+	asm330lhhxg1_den_mode_get(&dev_ctx, &den_mode);
+	den_mode = ASM330LHHXG1_LEVEL_LETCHED;
+	asm330lhhxg1_den_mode_set(&dev_ctx, den_mode);
+
+	// Set DEN to be "active high" in CTRL9_XL register
+	asm330lhhxg1_den_polarity_get(&dev_ctx, &den_lh);
+	den_lh = ASM330LHHXG1_DEN_ACT_HIGH;
+	asm330lhhxg1_den_polarity_set(&dev_ctx, den_lh);
+
+	// Stamp DEN value in z-axis accelerometer LSB (CTRL9_XL register)
+	asm330lhhxg1_den_mark_axis_x_set(&dev_ctx, 0);
+	asm330lhhxg1_den_mark_axis_y_set(&dev_ctx, 0);
+	asm330lhhxg1_den_mark_axis_z_set(&dev_ctx, 1);
+	// This last command does two things:
+	// 1. Stamp in z-axis accelerometer
+	// 2. Extends DEN functionality to accelerometer: DEN_XL_EN = 1
+	// Source: https://github.com/STMicroelectronics/asm330lhhxg1-pid/issues/1#issuecomment-4864940543
+	asm330lhhxg1_den_enable_set(&dev_ctx, ASM330LHHXG1_STAMP_IN_XL_DATA);
+	// The "asm330lhhxg1_den_enable_set" function does not work correctly, it sets DEN_XL_G to 1 (as expected)
+	// but it does not set DEN_XL_EN to 1, therefore, this has to be done manually.
+	uint8_t buffer[8];
+	platform_read(&hspi2, 0x18, buffer, 1);
+	buffer[0] = buffer[0] | 0x08;
+	platform_write(&hspi2, 0x18, buffer, 1);
 
 }
 
 // @brief Read Measurements
 void read_measurements(float_t acceleration_mg[3], float_t angular_rate_mdps[3]) {
 
-	uint8_t reg;
-
-	// NOTE: REMEMBER THAT YOU NEED TO CHECK THE LSB OF THE X-AXIS ACCELEROMETER
-	// READING TO CONFIRM THAT THE DEN WAS PROPERLY TRIGGERED.
+	// Flag to check that data is ready
+	uint8_t data_ready;
 
 	// Read acceleration field data
-	asm330lhhxg1_xl_flag_data_ready_get(&dev_ctx, &reg);
-	if (reg) {
+	asm330lhhxg1_xl_flag_data_ready_get(&dev_ctx, &data_ready);
+
+	// Convert acceleration to mg and store
+	if (data_ready) {
 		memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
 		asm330lhhxg1_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
+
+		// Check that x-axis accelerometer reading is stamped
+		if ((data_raw_acceleration[2] & 0x01) != 0x01) {
+			return;
+		}
+
 		acceleration_mg[0] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[0]);
 		acceleration_mg[1] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[1]);
 		acceleration_mg[2] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[2]);
 	}
 
     // Read angular rate field data
-	asm330lhhxg1_gy_flag_data_ready_get(&dev_ctx, &reg);
-	if (reg) {
+	asm330lhhxg1_gy_flag_data_ready_get(&dev_ctx, &data_ready);
+
+	// Convert angular rate to mdps and store
+	if (data_ready) {
 		memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
 		asm330lhhxg1_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
 		angular_rate_mdps[0] = asm330lhhxg1_from_fs500dps_to_mdps(data_raw_angular_rate[0]);
