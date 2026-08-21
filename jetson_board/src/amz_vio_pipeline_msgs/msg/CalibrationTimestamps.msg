@@ -1,0 +1,2 @@
+uint64 imu_timestamp
+uint64 mcu_timestamp

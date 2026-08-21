@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(amz_vio_pipeline_msgs REQUIRED)
 
 # executable
 add_executable(can_driver src/can_driver.cpp)
@@ -18,7 +19,8 @@ add_executable(can_driver src/can_driver.cpp)
 ament_target_dependencies(can_driver
                           rclcpp
                           std_msgs
-                          sensor_msgs)
+                          sensor_msgs
+                          amz_vio_pipeline_msgs)
 
 # expose header file to cpp file
 target_include_directories(can_driver 
