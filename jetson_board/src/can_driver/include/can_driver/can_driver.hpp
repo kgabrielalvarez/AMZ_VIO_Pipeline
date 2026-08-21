@@ -5,6 +5,17 @@
 #ifndef can_driver_h
 #define can_driver_h
 
+// Include CAN specific Libraries
+#include "linux/can/raw.h"
+#include <sys/ioctl.h>
+#include <net/if.h>
+
+// Include ROS2 libraries
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/u_int8.hpp"
+#include "sensor_msgs/msg/imu.hpp"
+#include "amz_vio_pipeline_msgs/msg/calibration_timestamps.hpp"
+
 #define STATE_CAN_ID            0x001 // Highest priority
 #define FINISHED_CAN_ID         0x002 // Second highest priority
 #define TIMESTAMPS_CAN_ID       0x003 // Third highest priority
@@ -16,17 +27,6 @@
 #define INT_SIZE                    4 // [bytes]
 #define UINT64_SIZE                 8 // [bytes]
 #define UINT8_SIZE                  1 // [bytes]
-
-// Include CAN specific Libraries
-#include "linux/can/raw.h"
-#include <sys/ioctl.h>
-#include <net/if.h>
-
-// Include ROS2 libraries
-#include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/u_int8.hpp"
-#include "sensor_msgs/msg/imu.hpp"
-#include "amz_vio_pipeline_msgs/msg/calibration_interfaces.hpp"
 
 // Triggering board state
 enum class triggering_board_state : uint8_t {
@@ -92,7 +92,7 @@ class can_driver : public rclcpp::Node {
 
         // Messages to publish
         sensor_msgs::msg::Imu imu_msg_;
-        amz_vio_pipeline_msgs::msg::calibration_timestamps calibration_timestamps_msg_;
+        amz_vio_pipeline_msgs::msg::CalibrationTimestamps calibration_timestamps_msg_;
 
         // Write to CAN Bus
         ssize_t num_bytes_write_;
@@ -121,7 +121,7 @@ class can_driver : public rclcpp::Node {
 
         // Publishers and subscriber
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_and_timestamp_publisher_;
-        rclcpp::Publisher<amz_vio_pipeline_msgs::msg::calibration_interfaces>::SharedPtr 
+        rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CalibrationTimestamps>::SharedPtr 
             calibration_timestamps_publisher_;
         rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr state_publisher_;
         rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr state_subscriber_;

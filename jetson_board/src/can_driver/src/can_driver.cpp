@@ -9,7 +9,7 @@ can_driver::can_driver() : Node("can_driver") {
 
     // Initialize publishers and subscriber
     imu_and_timestamp_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu_and_timestamps", 10);
-    calibration_timestamps_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::calibration_interfaces>
+    calibration_timestamps_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::CalibrationTimestamps>
         ("calibration_timestamps", 10);
     state_publisher_ = this->create_publisher<std_msgs::msg::UInt8>("triggering_board_state", 10);
     state_subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
@@ -67,7 +67,7 @@ void can_driver::transition_to_STOP() {
     }
 
     // Send triggering board command to stop running
-    num_bytes_write_ = write(socket_, &stop_triggering_board_frame_, sizeof(struct canfd_frame));
+    num_bytes_write_ = write(socket_, &stop_frame_, sizeof(struct canfd_frame));
 
     // Check that we didn't get an error
     if (num_bytes_write_ < 0) {
@@ -110,13 +110,13 @@ void can_driver::transition_to_CAL_IMU() {
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        can_driver::state_to_string(triggering_board_state));
+        can_driver::state_to_string(triggering_board_state_));
     RCLCPP_INFO(this->get_logger(), "Number of IMU calibration timestamps = %d s", 
         imu_calibration_timestamps_);
 
 }
 
-void cand_driver::transition_to_CAL_CAM() {
+void can_driver::transition_to_CAL_CAM() {
 
     // Check that state transition is valid
     // 1. Check that previous state was CAL_IMU
@@ -148,7 +148,7 @@ void cand_driver::transition_to_CAL_CAM() {
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        can_driver::state_to_string(triggering_board_state));
+        can_driver::state_to_string(triggering_board_state_));
     RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", 
         imu_rate_, camera_calibration_rate_);
 
@@ -198,7 +198,7 @@ void can_driver::transition_to_RUN() {
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        can_driver::state_to_string(triggering_board_state));
+        can_driver::state_to_string(triggering_board_state_));
     RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", imu_rate_, camera_rate_);
 
 }
@@ -294,7 +294,7 @@ void can_driver::read_can() {
         }
 
         // Check what type of CAN message we have received
-        switch (fraem_.can_id) {
+        switch (frame_.can_id) {
             case STATE_CAN_ID:
                 read_state_can_msg();
                 break;
@@ -358,7 +358,7 @@ void can_driver::read_state_can_msg() {
 void can_driver::read_finished_can_msg() {
 
     // Check that message was sent from correct state
-    if (triggerign_board_state_ != triggering_board_state::CAL_IMU) {
+    if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
         throw std::runtime_error("Finished IMU calibration message sent from outside of CAL_IMU state");
     }
 
@@ -378,8 +378,12 @@ void can_driver::read_finished_can_msg() {
     // Reset counter
     calibration_timestamp_counter_ = 0;
 
+    // Create message to publish
+    std_msgs::msg::UInt8 finished_msg;
+    finished_msg.data = static_cast<uint8_t>(triggering_board_state::CAL_CAM);
+
     // Request transition to CAM_CAL state
-    state_publisher_->publish(static_cast<uint8_t>(triggering_board_state::CAM_CAL));
+    state_publisher_->publish(finished_msg);
 
 }
 
