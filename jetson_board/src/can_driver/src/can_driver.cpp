@@ -32,7 +32,7 @@ can_driver::can_driver() : Node("can_driver") {
     run_frame_.len = RUN_FRAME_LENGTH;
     run_frame_.data[0] = static_cast<uint8_t>(triggering_board_state::RUN);
 
-    // Define socket timeout
+    // Define socket timeout: 0.1 ms
     timeout_.tv_sec = 0;
     timeout_.tv_usec = 100000;
 
@@ -44,7 +44,6 @@ can_driver::can_driver() : Node("can_driver") {
 // Destructor
 can_driver::~can_driver() {
 
-    triggering_board_state_ = triggering_board_state::STOP;
     transition_to_STOP();
 
 }
@@ -71,7 +70,7 @@ void can_driver::transition_to_STOP() {
 
     // Check that we didn't get an error
     if (num_bytes_write_ < 0) {
-        perror("Error writing stop_triggering_board_frame_ to CAN Bus");
+        perror("Error writing stop_frame_ to CAN Bus");
     }
 
     // Close the socket
@@ -88,7 +87,7 @@ void can_driver::transition_to_CAL_IMU() {
     // 1. Check that previous state was STOP
     if (triggering_board_state_ != triggering_board_state::STOP) {
         throw std::runtime_error("Transitioning to CAL_IMU from " + 
-            can_driver::state_to_string(triggering_board_state_) + " is invalid");
+            state_to_string(triggering_board_state_) + " is invalid");
     }
     
     // Perform state transition
@@ -110,8 +109,8 @@ void can_driver::transition_to_CAL_IMU() {
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        can_driver::state_to_string(triggering_board_state_));
-    RCLCPP_INFO(this->get_logger(), "Number of IMU calibration timestamps = %d s", 
+        state_to_string(triggering_board_state_));
+    RCLCPP_INFO(this->get_logger(), "Number of IMU calibration timestamps = %d ", 
         imu_calibration_timestamps_);
 
 }
@@ -122,7 +121,7 @@ void can_driver::transition_to_CAL_CAM() {
     // 1. Check that previous state was CAL_IMU
     if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
         throw std::runtime_error("Transitioning to CAL_CAM from " + 
-            can_driver::state_to_string(triggering_board_state_) + " is invalid");
+            state_to_string(triggering_board_state_) + " is invalid");
     }
     // Update imu rate
     imu_rate_ = this->get_parameter("imu_rate").as_int();
@@ -148,7 +147,7 @@ void can_driver::transition_to_CAL_CAM() {
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        can_driver::state_to_string(triggering_board_state_));
+        state_to_string(triggering_board_state_));
     RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", 
         imu_rate_, camera_calibration_rate_);
 
@@ -160,7 +159,7 @@ void can_driver::transition_to_RUN() {
     // 1. Check that previous state was CAL_CAM
     if (triggering_board_state_ != triggering_board_state::CAL_CAM) {
         throw std::runtime_error("Transitioning to RUN from " + 
-            can_driver::state_to_string(triggering_board_state_) + " is invalid");
+            state_to_string(triggering_board_state_) + " is invalid");
     }
     // Update IMU and camera rates
     imu_rate_ = this->get_parameter("imu_rate").as_int();
@@ -198,7 +197,7 @@ void can_driver::transition_to_RUN() {
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        can_driver::state_to_string(triggering_board_state_));
+        state_to_string(triggering_board_state_));
     RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", imu_rate_, camera_rate_);
 
 }
@@ -270,7 +269,7 @@ void can_driver::configure_can_socket() {
 
 void can_driver::read_can() {
     
-    // Print start of CAN thread
+    // Log start of CAN thread
     RCLCPP_INFO(this->get_logger(), "CAN thread started...");
 
     while ((triggering_board_state_ == triggering_board_state::CAL_IMU) ||
@@ -395,8 +394,8 @@ void can_driver::read_timestamps_can_msg() {
     }
 
     // Pass CAN bus frame to ROS2 message
-    std::memcpy(&imu_timestamp_, &frame_.data[0], UINT64_SIZE);
-    std::memcpy(&mcu_timestamp_, &frame_.data[8], UINT64_SIZE);
+    std::memcpy(&imu_timestamp_, &frame_.data[0], UINT32_SIZE);
+    std::memcpy(&mcu_timestamp_, &frame_.data[4], UINT32_SIZE);
     calibration_timestamps_msg_.imu_timestamp = imu_timestamp_;
     calibration_timestamps_msg_.mcu_timestamp = mcu_timestamp_;
 
@@ -417,13 +416,13 @@ void can_driver::read_imu_can_msg() {
     }
     
     // Convert uint8_t to float
-    std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], INT_SIZE);
-    std::memcpy(&acceleration_y_.as_bytes[0], &frame_.data[4], INT_SIZE);
-    std::memcpy(&acceleration_z_.as_bytes[0], &frame_.data[8], INT_SIZE);
-    std::memcpy(&angular_velocity_x_.as_bytes[0], &frame_.data[12], INT_SIZE);
-    std::memcpy(&angular_velocity_y_.as_bytes[0], &frame_.data[16], INT_SIZE);
-    std::memcpy(&angular_velocity_z_.as_bytes[0], &frame_.data[20], INT_SIZE);
-    std::memcpy(&timestamp_.as_bytes[0], &frame_.data[24], 4);
+    std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], FLOAT_SIZE);
+    std::memcpy(&acceleration_y_.as_bytes[0], &frame_.data[4], FLOAT_SIZE);
+    std::memcpy(&acceleration_z_.as_bytes[0], &frame_.data[8], FLOAT_SIZE);
+    std::memcpy(&angular_velocity_x_.as_bytes[0], &frame_.data[12], FLOAT_SIZE);
+    std::memcpy(&angular_velocity_y_.as_bytes[0], &frame_.data[16], FLOAT_SIZE);
+    std::memcpy(&angular_velocity_z_.as_bytes[0], &frame_.data[20], FLOAT_SIZE);
+    std::memcpy(&timestamp_.as_bytes[0], &frame_.data[24], UINT32_SIZE);
 
     // Unit conversion:
     // 1. Accelerometer: mg to m/s^2

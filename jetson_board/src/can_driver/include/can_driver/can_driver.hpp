@@ -25,7 +25,8 @@
 #define CAL_CAM_FRAME_LENGTH        9 // state (1 byte) + imu_rate_ (4 bytes) + camera_calibration_rate_ (4 bytes)
 #define RUN_FRAME_LENGTH            9 // state (1 byte) + imu_rate_ (4 bytes) + camera_rate_ (4 bytes)
 #define INT_SIZE                    4 // [bytes]
-#define UINT64_SIZE                 8 // [bytes]
+#define FLOAT_SIZE                  4 // [bytes]
+#define UINT32_SIZE                 4 // [bytes]
 #define UINT8_SIZE                  1 // [bytes]
 
 // Triggering board state
@@ -83,8 +84,8 @@ class can_driver : public rclcpp::Node {
         bytes_to_float_t timestamp_;          // [ms]
 
         // Variables to publish in calibration_timestamps msg
-        uint64_t imu_timestamp_;
-        uint64_t mcu_timestamp_;
+        uint32_t imu_timestamp_;
+        uint32_t mcu_timestamp_;
 
         // Unit conversion factors
         float mg_to_ms2_ = 9.81/1000.0;
