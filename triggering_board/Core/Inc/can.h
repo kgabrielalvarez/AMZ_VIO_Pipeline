@@ -4,6 +4,16 @@
 /* Include -------------------------------------------------------------------*/
 #include "stm32g4xx_hal.h"
 
+/* Macros --------------------------------------------------------------------*/
+// IDs of CAN messages
+#define STATE_CAN_ID 		0x001 // Highest priority
+#define FINISHED_CAN_ID		0x002 // Second highest priority
+#define TIMESTAMPS_CAN_ID	0x003 // Third highest priority
+#define IMU_CAN_ID			0x004 // Lowest priority
+
+// Buffer size
+#define BUFFER_SIZE			   32 // [bytes]
+
 /* Declare global variables --------------------------------------------------*/
 // FDCAN controller 2
 extern FDCAN_TxHeaderTypeDef TxHeader2;

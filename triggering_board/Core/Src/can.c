@@ -10,17 +10,17 @@
 #include "state_machine.h"
 
 /* Declare global variables --------------------------------------------------*/
-// FDCAN controller 2
+// FDCAN controller 2: left CAN transceiver on PCB and should be used to communicate with external IMU
 FDCAN_TxHeaderTypeDef TxHeader2;
 FDCAN_RxHeaderTypeDef RxHeader2;
-uint8_t TxData2[32];
-uint8_t RxData2[32];
+uint8_t TxData2[BUFFER_SIZE];
+uint8_t RxData2[BUFFER_SIZE];
 
-// FDCAN controller 3
+// FDCAN controller 3: right CAN transceiver on PCB and should be used to communicate with Jetson
 FDCAN_TxHeaderTypeDef TxHeader3;
 FDCAN_RxHeaderTypeDef RxHeader3;
-uint8_t TxData3[32];
-uint8_t RxData3[32];
+uint8_t TxData3[BUFFER_SIZE];
+uint8_t RxData3[BUFFER_SIZE];
 
 /* Declare file-scope variables ----------------------------------------------*/
 //CAN filter
@@ -83,7 +83,7 @@ void configure_fdcan(void) {
 	}
 
 	// Configure TX Header for fdcan2
-	TxHeader2.Identifier = 0x11;
+	TxHeader2.Identifier = STATE_CAN_ID;
 	TxHeader2.IdType = FDCAN_STANDARD_ID;
 	TxHeader2.TxFrameType = FDCAN_DATA_FRAME;
 	TxHeader2.DataLength = FDCAN_DLC_BYTES_8;
@@ -94,7 +94,7 @@ void configure_fdcan(void) {
 	TxHeader2.MessageMarker = 0;
 
 	// Configure TX Header for fdcan3
-	TxHeader3.Identifier = 0x002;
+	TxHeader3.Identifier = STATE_CAN_ID;
 	TxHeader3.IdType = FDCAN_STANDARD_ID;
 	TxHeader3.TxFrameType = FDCAN_DATA_FRAME;
 	TxHeader3.DataLength = FDCAN_DLC_BYTES_32;
@@ -112,9 +112,12 @@ void HAL_FDCAN_RxFifo0Callba0k(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
   if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
   {
 	if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader2, RxData2) != HAL_OK) {
-		error_state = FDCAN_GET_RX_MESSAGE;
+		error_state = FDCAN_GET_RX_MESSAGE_FAILED;
 		Error_Handler();
 	}
+
+	// TO-DO
+
 	if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK){
 		error_state = FDCAN_ACTIVATE_NOTIFICATION_FAILED;
 		Error_Handler();
@@ -130,28 +133,27 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
   {
 
     if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &RxHeader3, RxData3) != HAL_OK) {
-    	error_state = FDCAN_GET_RX_MESSAGE;
+    	error_state = FDCAN_GET_RX_MESSAGE_FAILED;
     	Error_Handler();
     }
 
-    // Set triggering board state
+    // Check message ID
+    if (RxHeader3.Identifier != STATE_CAN_ID) {
+    	error_state = INCORRECT_CAN_ID;
+    	Error_Handler();
+    }
+
+    // Set flag to request state transition and check that message is valid
     switch (RxData3[0]) {
-    case STOP:
-    	// TO-DO
-    	break;
-
-    case CAL_IMU:
-    	// TO-DO
-    	break;
-
-    case CAL_CAM:
-    	// TO-DO
-    	break;
-
-    case RUN:
-    	// TO-DO
-    	break;
-
+		case STOP:
+		case CAL_IMU:
+		case CAL_CAM:
+		case RUN:
+			state_transition_requested = true;
+			break;
+		default:
+			error_state = REQUESTED_TRANSITION_TO_INVALID_STATE,
+			Error_Handler();
     }
 
     if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK) {
