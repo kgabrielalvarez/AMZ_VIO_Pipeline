@@ -24,10 +24,6 @@
 #define CAL_IMU_FRAME_LENGTH        5 // state (1 byte) + imu_calibration_duration_ (4 bytes)
 #define CAL_CAM_FRAME_LENGTH        9 // state (1 byte) + imu_rate_ (4 bytes) + camera_calibration_rate_ (4 bytes)
 #define RUN_FRAME_LENGTH            9 // state (1 byte) + imu_rate_ (4 bytes) + camera_rate_ (4 bytes)
-#define INT_SIZE                    4 // [bytes]
-#define FLOAT_SIZE                  4 // [bytes]
-#define UINT32_SIZE                 4 // [bytes]
-#define UINT8_SIZE                  1 // [bytes]
 
 // Triggering board state
 enum class triggering_board_state : uint8_t {

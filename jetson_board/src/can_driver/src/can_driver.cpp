@@ -97,7 +97,7 @@ void can_driver::transition_to_CAL_IMU() {
     can_driver::configure_can_socket();
 
     // Add number of IMU calibration timestamps to CAN message
-    std::memcpy(&cal_imu_frame_.data[1], &imu_calibration_timestamps_, INT_SIZE);
+    std::memcpy(&cal_imu_frame_.data[1], &imu_calibration_timestamps_, sizeof(int32_t));
     
     // Send triggering board command to enter CAL_IMU state
     num_bytes_write_ = write(socket_, &cal_imu_frame_, sizeof(struct canfd_frame));
@@ -134,8 +134,8 @@ void can_driver::transition_to_CAL_CAM() {
     triggering_board_state_ = triggering_board_state::CAL_CAM;
 
     // Add IMU rate and camera rate to CAN message
-    std::memcpy(&cal_cam_frame_.data[1], &imu_rate_, INT_SIZE);
-    std::memcpy(&cal_cam_frame_.data[5], &camera_calibration_rate_, INT_SIZE);
+    std::memcpy(&cal_cam_frame_.data[1], &imu_rate_, sizeof(int32_t));
+    std::memcpy(&cal_cam_frame_.data[5], &camera_calibration_rate_, sizeof(int32_t));
 
     // Send triggering board command to enter CAL_CAM state
     num_bytes_write_ = write(socket_, &cal_cam_frame_, sizeof(struct canfd_frame));
@@ -184,8 +184,8 @@ void can_driver::transition_to_RUN() {
     triggering_board_state_ = triggering_board_state::RUN;        
 
     // Add IMU rate and camera rate to CAN message
-    std::memcpy(&run_frame_.data[1], &imu_rate_, INT_SIZE);
-    std::memcpy(&run_frame_.data[5], &camera_rate_, INT_SIZE);
+    std::memcpy(&run_frame_.data[1], &imu_rate_, sizeof(int32_t));
+    std::memcpy(&run_frame_.data[5], &camera_rate_, sizeof(int32_t));
 
     // Send triggering board command to enter RUN state
     num_bytes_write_ = write(socket_, &run_frame_, sizeof(struct canfd_frame));
@@ -321,7 +321,7 @@ void can_driver::read_state_can_msg() {
 
     // Get internal state that triggering board is in
     uint8_t raw_internal_state;
-    std::memcpy(&raw_internal_state, &frame_.data[0], UINT8_SIZE);
+    std::memcpy(&raw_internal_state, &frame_.data[0], sizeof(uint8_t));
     triggering_board_state triggering_board_internal_state = 
         static_cast<triggering_board_state>(raw_internal_state);
     
@@ -363,7 +363,7 @@ void can_driver::read_finished_can_msg() {
 
     // Confirm that message value is correct
     uint8_t raw_message;
-    std::memcpy(&raw_message, &frame_.data[0], UINT8_SIZE);
+    std::memcpy(&raw_message, &frame_.data[0], sizeof(uint8_t));
     if (raw_message != 0x01) {
         throw std::runtime_error("Finished IMU calibration message is incorrect");
     }
@@ -394,8 +394,8 @@ void can_driver::read_timestamps_can_msg() {
     }
 
     // Pass CAN bus frame to ROS2 message
-    std::memcpy(&imu_timestamp_, &frame_.data[0], UINT32_SIZE);
-    std::memcpy(&mcu_timestamp_, &frame_.data[4], UINT32_SIZE);
+    std::memcpy(&imu_timestamp_, &frame_.data[0], sizeof(uint32_t));
+    std::memcpy(&mcu_timestamp_, &frame_.data[4], sizeof(uint32_t));
     calibration_timestamps_msg_.imu_timestamp = imu_timestamp_;
     calibration_timestamps_msg_.mcu_timestamp = mcu_timestamp_;
 
@@ -416,13 +416,13 @@ void can_driver::read_imu_can_msg() {
     }
     
     // Convert uint8_t to float
-    std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], FLOAT_SIZE);
-    std::memcpy(&acceleration_y_.as_bytes[0], &frame_.data[4], FLOAT_SIZE);
-    std::memcpy(&acceleration_z_.as_bytes[0], &frame_.data[8], FLOAT_SIZE);
-    std::memcpy(&angular_velocity_x_.as_bytes[0], &frame_.data[12], FLOAT_SIZE);
-    std::memcpy(&angular_velocity_y_.as_bytes[0], &frame_.data[16], FLOAT_SIZE);
-    std::memcpy(&angular_velocity_z_.as_bytes[0], &frame_.data[20], FLOAT_SIZE);
-    std::memcpy(&timestamp_.as_bytes[0], &frame_.data[24], UINT32_SIZE);
+    std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], sizeof(float));
+    std::memcpy(&acceleration_y_.as_bytes[0], &frame_.data[4], sizeof(float));
+    std::memcpy(&acceleration_z_.as_bytes[0], &frame_.data[8], sizeof(float));
+    std::memcpy(&angular_velocity_x_.as_bytes[0], &frame_.data[12], sizeof(float));
+    std::memcpy(&angular_velocity_y_.as_bytes[0], &frame_.data[16], sizeof(float));
+    std::memcpy(&angular_velocity_z_.as_bytes[0], &frame_.data[20], sizeof(float));
+    std::memcpy(&timestamp_.as_bytes[0], &frame_.data[24], sizeof(uint32_t));
 
     // Unit conversion:
     // 1. Accelerometer: mg to m/s^2
