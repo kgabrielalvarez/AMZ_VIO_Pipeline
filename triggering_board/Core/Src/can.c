@@ -1,58 +1,164 @@
+// Based on code from:
+// 1. FDCAN configuration: https://community.st.com/stm32-mcus-60/how-to-use-fdcan-to-create-a-simple-communication-with-a-basic-filter-132821
+// 2. bxCAN part I: https://community.st.com/stm32-mcus-60/using-can-bxcan-in-normal-mode-with-stm32-microcontrollers-part-1-151183
+// 3. bxCAN part II: https://community.st.com/stm32-mcus-60/using-can-bxcan-in-normal-mode-with-stm32-microcontrollers-part-2-152668
+// 4. bxCAN bit time configuration: https://community.st.com/stm32-mcus-60/can-bxcan-bit-time-configuration-on-stm32-mcus-135466
+
 /* Include -------------------------------------------------------------------*/
 #include "can.h"
+#include "main.h" // needed for Error_Handler()
+#include "state_machine.h"
 
-/* Define Private functions --------------------------------------------------*/
+/* Declare global variables --------------------------------------------------*/
+// FDCAN controller 2
+FDCAN_TxHeaderTypeDef TxHeader2;
+FDCAN_RxHeaderTypeDef RxHeader2;
+uint8_t TxData2[32];
+uint8_t RxData2[32];
 
-void fdcan_config(void) {
+// FDCAN controller 3
+FDCAN_TxHeaderTypeDef TxHeader3;
+FDCAN_RxHeaderTypeDef RxHeader3;
+uint8_t TxData3[32];
+uint8_t RxData3[32];
 
-    // Define filter configuration
-    FDCAN_FilterTypeDef filter_config;
-    filter_config.IdType = FDCAN_STANDARD_ID;           	// Filter applies to standard (not extended) IDs
-    filter_config.FilterIndex = 0;                      	// Specify filter
-    filter_config.FilterType = FDCAN_FILTER_RANGE;			// Specify filter type
-    filter_config.FilterID1 = 0x321;                    	// Lowest ID that gets accepted
-    filter_config.FilterID2 = 0x7FF;                    	// Highest ID that gets accepted
-    filter_config.FilterConfig = FDCAN_FILTER_TO_RXFIFO0; 	// Specify FIFO
+/* Declare file-scope variables ----------------------------------------------*/
+//CAN filter
+static FDCAN_FilterTypeDef sFilterConfig;
 
-    // Configure FDCAN2 filter
-    if (HAL_FDCAN_ConfigFilter(&hfdcan2, &filter_config) != HAL_OK) {
-        Error_Handler();
-    }
+/* Declare external variables ------------------------------------------------*/
+extern FDCAN_HandleTypeDef hfdcan2;
+extern FDCAN_HandleTypeDef hfdcan3;
+
+/* Define  functions ---------------------------------------------------------*/
+
+void configure_fdcan(void) {
+
+	// Configure fdcan2
+	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+	sFilterConfig.FilterIndex = 0;
+	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+	sFilterConfig.FilterID1 = 0x22;
+	sFilterConfig.FilterID2 = 0x22;
+	if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
+		error_state = FDCAN_CONFIG_FILTER_FAILED;
+		Error_Handler();
+	}
+
+	// Configure fdcan3
+	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+	sFilterConfig.FilterIndex = 0;
+	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
+	sFilterConfig.FilterID1 = 0x001;
+	sFilterConfig.FilterID2 = 0x7FF;
+	if (HAL_FDCAN_ConfigFilter(&hfdcan3, &sFilterConfig) != HAL_OK) {
+		error_state = FDCAN_CONFIG_FILTER_FAILED;
+		Error_Handler();
+	}
+
+	// STart fdcan2
+	if(HAL_FDCAN_Start(&hfdcan2)!= HAL_OK) {
+		error_state = FDCAN_START_FAILED;
+		Error_Handler();
+	}
+
+	// STart fdcan3
+	if(HAL_FDCAN_Start(&hfdcan3)!= HAL_OK) {
+		error_state = FDCAN_START_FAILED;
+		Error_Handler();
+	}
+
+	// Activate the notification for new data in FIFO0 for fdcan2
+	if (HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
+		error_state = FDCAN_ACTIVATE_NOTIFICATION_FAILED;
+		Error_Handler();
+	}
+
+	// Activate the notification for new data in FIFO1 for fdcan3
+	if (HAL_FDCAN_ActivateNotification(&hfdcan3, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK) {
+		error_state = FDCAN_ACTIVATE_NOTIFICATION_FAILED;
+		Error_Handler();
+	}
+
+	// Configure TX Header for fdcan2
+	TxHeader2.Identifier = 0x11;
+	TxHeader2.IdType = FDCAN_STANDARD_ID;
+	TxHeader2.TxFrameType = FDCAN_DATA_FRAME;
+	TxHeader2.DataLength = FDCAN_DLC_BYTES_8;
+	TxHeader2.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+	TxHeader2.BitRateSwitch = FDCAN_BRS_OFF;
+	TxHeader2.FDFormat = FDCAN_CLASSIC_CAN;
+	TxHeader2.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+	TxHeader2.MessageMarker = 0;
+
+	// Configure TX Header for fdcan3
+	TxHeader3.Identifier = 0x002;
+	TxHeader3.IdType = FDCAN_STANDARD_ID;
+	TxHeader3.TxFrameType = FDCAN_DATA_FRAME;
+	TxHeader3.DataLength = FDCAN_DLC_BYTES_32;
+	TxHeader3.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+	TxHeader3.BitRateSwitch = FDCAN_BRS_OFF;
+	TxHeader3.FDFormat = FDCAN_FD_CAN;
+	TxHeader3.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+	TxHeader3.MessageMarker = 0;
     
-    // Configure FDCAN3 filter
-    // if (HAL_FDCAN_ConfigFilter(&hfdcan3, &filter_config) != HAL_OK) {
-    //     Error_Handler();
-    // }
+}
 
-    // Start FDCAN2 module
-    if (HAL_FDCAN_Start(&hfdcan2) != HAL_OK) {
-        Error_Handler();
+// FDCAN2 callback
+void HAL_FDCAN_RxFifo0Callba0k(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+  if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
+  {
+	if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader2, RxData2) != HAL_OK) {
+		error_state = FDCAN_GET_RX_MESSAGE;
+		Error_Handler();
+	}
+	if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK){
+		error_state = FDCAN_ACTIVATE_NOTIFICATION_FAILED;
+		Error_Handler();
+	}
+  }
+}
+
+// FDCAN3 callback
+void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
+{
+
+  if((RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE) != RESET)
+  {
+
+    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &RxHeader3, RxData3) != HAL_OK) {
+    	error_state = FDCAN_GET_RX_MESSAGE;
+    	Error_Handler();
     }
 
-    // Start FDCAN3 module
-    if (HAL_FDCAN_Start(&hfdcan3) != HAL_OK) {
-        Error_Handler();
+    // Set triggering board state
+    switch (RxData3[0]) {
+    case STOP:
+    	// TO-DO
+    	break;
+
+    case CAL_IMU:
+    	// TO-DO
+    	break;
+
+    case CAL_CAM:
+    	// TO-DO
+    	break;
+
+    case RUN:
+    	// TO-DO
+    	break;
+
     }
 
-    // Configure interrupt 0 to be triggered when FDCAN2 receives a message
-    if (HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
-        Error_Handler();
+    if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK) {
+    	error_state = FDCAN_ACTIVATE_NOTIFICATION_FAILED;
+    	Error_Handler();
     }
 
-    // Configure interrupt 1 to be triggered when FDCAN3 receives a message
-    // if (HAL_FDCAN_ActivateNotification(&hfdcan3, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK) {
-    //     Error_Handler();
-    // }
+  }
 
-    // Configure TX header
-    tx_header.Identifier = 0x321;                        // Message (not device) ID
-    tx_header.IdType = FDCAN_STANDARD_ID;                // TX uses standard (not extended) IDs
-    tx_header.TxFrameType = FDCAN_DATA_FRAME;            // Message being sent is data (not a request for data)
-    tx_header.DataLength = FDCAN_DLC_BYTES_2;            // Send 2 bytes of data
-    tx_header.ErrorStateIndicator = FDCAN_ESI_PASSIVE;   // ???
-    tx_header.BitRateSwitch = FDCAN_BRS_OFF;             // Use constant bit rate (classical CAN)
-    tx_header.FDFormat = FDCAN_CLASSIC_CAN;              // Configure classical CAN
-    tx_header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;   // Disable recording of transmitted messages
-    tx_header.MessageMarker = 0;                         // Unused since trnasmitted messages aren't recorded
-    
 }

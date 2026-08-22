@@ -65,35 +65,6 @@ static void MX_USB_PCD_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-// IMU variables
-float_t acceleration_mg[3];
-float_t angular_rate_mdps[3];
-uint8_t drdy_event;
-
-// Current time
-uint32_t timestamp;
-
-// IMU interrupt callback
-__weak void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-	if (GPIO_Pin == IMU_INT1_Pin) {
-		drdy_event = 1;
-	}
-}
-
-// CAN variables
-FDCAN_FilterTypeDef sFilterConfig;
-FDCAN_TxHeaderTypeDef   TxHeader2;
-FDCAN_RxHeaderTypeDef   RxHeader2;
-uint8_t               TxData2[8];
-uint8_t               RxData2[8];
-FDCAN_TxHeaderTypeDef   TxHeader3;
-FDCAN_RxHeaderTypeDef   RxHeader3;
-uint8_t               TxData3[32];
-uint8_t               RxData3[32];
-
-// Flag to indicate whether triggering board is active or not
-bool triggering_board_active = false;
-
 /* USER CODE END 0 */
 
 /**
@@ -110,7 +81,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+   HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -132,83 +103,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   configure_imu();
-//  fdcan_config();
-
-  // Configure fdcan2
-  sFilterConfig.IdType = FDCAN_STANDARD_ID;
-  sFilterConfig.FilterIndex = 0;
-  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
-  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-  sFilterConfig.FilterID1 = 0x22;
-  sFilterConfig.FilterID2 = 0x22;
-  if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK)
-  {
-    /* Filter configuration Error */
-    Error_Handler();
-  }
-
-  // Configure fdcan3
-  sFilterConfig.IdType = FDCAN_STANDARD_ID;
-  sFilterConfig.FilterIndex = 0;
-  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
-  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
-  sFilterConfig.FilterID1 = 0x001;
-  sFilterConfig.FilterID2 = 0x7FF;
-  if (HAL_FDCAN_ConfigFilter(&hfdcan3, &sFilterConfig) != HAL_OK)
-  {
-    /* Filter configuration Error */
-    Error_Handler();
-  }
-
-  // STart fdcan2
-  if(HAL_FDCAN_Start(&hfdcan2)!= HAL_OK)
-  {
-   Error_Handler();
-  }
-
-  // STart fdcan3
-  if(HAL_FDCAN_Start(&hfdcan3)!= HAL_OK)
-  {
-   Error_Handler();
-  }
-
-  // Activate the notification for new data in FIFO0 for fdcan2
-  if (HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
-  {
-    /* Notification Error */
-    Error_Handler();
-  }
-
-
-  // Activate the notification for new data in FIFO1 for fdcan3
-  if (HAL_FDCAN_ActivateNotification(&hfdcan3, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK)
-  {
-    /* Notification Error */
-    Error_Handler();
-  }
-
-  // Configure TX Header for fdcan2
-  TxHeader2.Identifier = 0x11;
-  TxHeader2.IdType = FDCAN_STANDARD_ID;
-  TxHeader2.TxFrameType = FDCAN_DATA_FRAME;
-  TxHeader2.DataLength = FDCAN_DLC_BYTES_8;
-  TxHeader2.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-  TxHeader2.BitRateSwitch = FDCAN_BRS_OFF;
-  TxHeader2.FDFormat = FDCAN_CLASSIC_CAN;
-  TxHeader2.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-  TxHeader2.MessageMarker = 0;
-
-
-  // Configure TX Header for fdcan3
-  TxHeader3.Identifier = 0x002;
-  TxHeader3.IdType = FDCAN_STANDARD_ID;
-  TxHeader3.TxFrameType = FDCAN_DATA_FRAME;
-  TxHeader3.DataLength = FDCAN_DLC_BYTES_32;
-  TxHeader3.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-  TxHeader3.BitRateSwitch = FDCAN_BRS_OFF;
-  TxHeader3.FDFormat = FDCAN_FD_CAN;
-  TxHeader3.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-  TxHeader3.MessageMarker = 0;
+  configure_fdcan();
 
   /* USER CODE END 2 */
 
@@ -216,16 +111,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
-	  HAL_GPIO_WritePin(IMU_INT2_GPIO_Port, IMU_INT2_Pin, GPIO_PIN_SET);
-	  while (drdy_event == 0) {
-		  // Wait for interrupt to be triggered
-	  }
-	  HAL_GPIO_WritePin(IMU_INT2_GPIO_Port, IMU_INT2_Pin, GPIO_PIN_RESET);
-	  drdy_event = 0;
-	  read_measurements(acceleration_mg, angular_rate_mdps);;
-
-	  HAL_Delay(100);
+	  state_machine_handler();
 
     /* USER CODE END WHILE */
 
@@ -508,54 +394,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
-// FDCAN3 Callback
-void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
-{
-  if((RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE) != RESET)
-  {
-    /* Retreive Rx messages from RX FIFO1 */
-    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &RxHeader3, RxData3) != HAL_OK)
-    {
-      /* Reception Error */
-      Error_Handler();
-    }
-
-    // Set flag
-    if (RxData3[0] == 0x01) {
-    	triggering_board_active = true;
-    }
-    else {
-    	triggering_board_active = false;
-    }
-
-    if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK)
-    {
-      /* Notification Error */
-      Error_Handler();
-    }
-  }
-}
-
-
-// FDCAN2 Callback
-void HAL_FDCAN_RxFifo0Callba0k(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
-{
-  if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
-  {
-    /* Retreive Rx messages from RX FIFO1 */
-	if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader2, RxData2) != HAL_OK)
-	{
-	  /* Reception Error */
-	  Error_Handler();
-	}
-	if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
-	{
-	  /* Notification Error */
-	  Error_Handler();
-	}
-  }
-}
 
 /* USER CODE END 4 */
 

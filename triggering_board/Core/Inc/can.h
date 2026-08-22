@@ -1,26 +1,24 @@
-// Based on code from:
-// 1. FDCAN configuration: https://community.st.com/stm32-mcus-60/how-to-use-fdcan-to-create-a-simple-communication-with-a-basic-filter-132821
-// 2. bxCAN part I: https://community.st.com/stm32-mcus-60/using-can-bxcan-in-normal-mode-with-stm32-microcontrollers-part-1-151183
-// 3. bxCAN part II: https://community.st.com/stm32-mcus-60/using-can-bxcan-in-normal-mode-with-stm32-microcontrollers-part-2-152668
-// 4. bxCAN bit time configuration: https://community.st.com/stm32-mcus-60/can-bxcan-bit-time-configuration-on-stm32-mcus-135466
+#ifndef can
+#define can
 
-#ifndef canh
-#define canh
+/* Include -------------------------------------------------------------------*/
+#include "stm32g4xx_hal.h"
 
-/* Includes ------------------------------------------------------------------*/
-#include "main.h"
-#include "stdio.h"
+/* Declare global variables --------------------------------------------------*/
+// FDCAN controller 2
+extern FDCAN_TxHeaderTypeDef TxHeader2;
+extern FDCAN_RxHeaderTypeDef RxHeader2;
+extern uint8_t TxData2[32];
+extern uint8_t RxData2[32];
 
-/* Declare private variables -------------------------------------------------*/
+// FDCAN controller 3
+extern FDCAN_TxHeaderTypeDef TxHeader3;
+extern FDCAN_RxHeaderTypeDef RxHeader3;
+extern uint8_t TxData3[32];
+extern uint8_t RxData3[32];
 
+/* Declare  functions --------------------------------------------------------*/
 
-/* External variables --------------------------------------------------------*/
-extern FDCAN_TxHeaderTypeDef tx_header;
-extern FDCAN_RxHeaderTypeDef rx_header;
-extern FDCAN_HandleTypeDef hfdcan2;
-extern FDCAN_HandleTypeDef hfdcan3;
-
-/* Declare private functions -------------------------------------------------*/
-void fdcan_config(void);
+void configure_fdcan(void);
 
 #endif

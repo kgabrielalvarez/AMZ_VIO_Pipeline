@@ -1,16 +1,41 @@
 // Based on the example code from:
-// https://github.com/STMicroelectronics/STMems_Standard_C_drivers/blob/master/asm330lhhxg1_STdC/examples/asm330lhhxg1_read_data_interrupt.c
+// https://github.com/STMicroelectronics/STMems_Standard_C_drivers/blob/98b62f0e4f7cf79fb1464012f4ba13f3c42c959b/asm330lhhxg1_STdC/examples/asm330lhhxg1_read_data_interrupt.c#L225
 
 /* Include -------------------------------------------------------------------*/
 #include "asm330lhh.h"
+#include "../../Drivers/asm330lhh/asm330lhhxg1_reg.h"
+#include "main.h"
+#include "state_machine.h"
+#include "string.h"
 
-/* Private variables ---------------------------------------------------------*/
+/* Macros --------------------------------------------------------------------*/
+#define BOOT_TIME 10 // [ms]
+#define TIMEOUT 1000 // [ms]
+
+/* Declare file-scope variables ----------------------------------------------*/
+
+// Raw measurements
 static int16_t data_raw_acceleration[3];
 static int16_t data_raw_angular_rate[3];
+
+// IMU configuration
 static uint8_t whoamI, rst;
 static stmdev_ctx_t dev_ctx;
 
-/* Define Private functions --------------------------------------------------*/
+// INT1 and INT2 configuration
+static asm330lhhxg1_pin_int1_route_t int1_route;
+static asm330lhhxg1_den_mode_t den_mode;
+static asm330lhhxg1_den_lh_t den_lh;
+
+/* Declare external variables ------------------------------------------------*/
+extern SPI_HandleTypeDef hspi2;
+
+/* Declare file-scope functions ----------------------------------------------*/
+static int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len);
+static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len);
+static void platform_delay(uint32_t ms);
+
+/* Define functions ----------------------------------------------------------*/
 
 /*
  * @brief  Write generic device register
@@ -57,19 +82,13 @@ void platform_delay(uint32_t ms) {
   HAL_Delay(ms);
 }
 
-// @brief Configure IMU
-void configure_imu() {
+void configure_imu(void) {
 
     // Initialize mems driver interface
     dev_ctx.write_reg = platform_write;
     dev_ctx.read_reg = platform_read;
     dev_ctx.mdelay = platform_delay;
     dev_ctx.handle = &hspi2;
-
-	// Initialize variables used to configure DEN
-	asm330lhhxg1_pin_int1_route_t int1_route;
-	asm330lhhxg1_den_mode_t den_mode;
-	asm330lhhxg1_den_lh_t den_lh;
 
     // Wait sensor boot time
     HAL_Delay(BOOT_TIME);
@@ -98,15 +117,28 @@ void configure_imu() {
     asm330lhhxg1_xl_full_scale_set(&dev_ctx, ASM330LHHXG1_4g);
     asm330lhhxg1_gy_full_scale_set(&dev_ctx, ASM330LHHXG1_500dps);
 
-    // Configure DEN
-    // DEN procedure:
-    // 1. STM32 sends active high signal to INT2 pin (DEN)
-    // 2. IMU stores measurements in output registers
-    // 3. IMU sends active high signal on INT1 pin
-    // 4. STM32 reads measurements
+}
 
-    // Set INT1_CTRL register to trigger data ready (DRDY) flag when DEN is triggered
-    asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
+void configure_imu_without_DEN(void) {
+
+	// Generate interrupt on INT1 when accelerometer data is ready
+	asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
+	int1_route.int1_ctrl.int1_drdy_xl = PROPERTY_ENABLE;
+	asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
+
+}
+
+void configure_imu_with_DEN(void) {
+
+	// Configure DEN
+	// DEN procedure:
+	// 1. STM32 sends active high signal to INT2 pin (DEN)
+	// 2. IMU stores measurements in output registers
+	// 3. IMU sends active high signal on INT1 pin
+	// 4. STM32 reads measurements
+
+	// Set INT1_CTRL register to trigger data ready (DRDY) flag when DEN is triggered
+	asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
 	int1_route.int1_ctrl.den_drdy_flag = PROPERTY_ENABLE;
 	asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
 
@@ -138,8 +170,7 @@ void configure_imu() {
 
 }
 
-// @brief Read Measurements
-void read_measurements(float_t acceleration_mg[3], float_t angular_rate_mdps[3]) {
+void read_measurements(float acceleration_mg[3], float angular_rate_mdps[3]) {
 
 	// Flag to check that data is ready
 	uint8_t data_ready;
@@ -154,7 +185,8 @@ void read_measurements(float_t acceleration_mg[3], float_t angular_rate_mdps[3])
 
 		// Check that x-axis accelerometer reading is stamped
 		if ((data_raw_acceleration[2] & 0x01) != 0x01) {
-			return;
+			error_state = DEN_MEASUREMENTS_NOT_STAMPED;
+			Error_Handler();
 		}
 
 		acceleration_mg[0] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[0]);
