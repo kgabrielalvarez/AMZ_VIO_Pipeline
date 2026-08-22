@@ -103,15 +103,15 @@ class can_driver : public rclcpp::Node {
         struct canfd_frame run_frame_;
 
         // Camera and IMU rates
-        int camera_rate_; // [FPS] User defined in YAML file
-        int camera_calibration_rate_ = 10; // [FPS]
-        int imu_rate_; // [Hz] User defined in YAML file
-        int imu_calibration_timestamps_ = 5*833; // [s]
+        int32_t camera_rate_; // [FPS] User defined in YAML file
+        int32_t camera_calibration_rate_ = 10; // [FPS]
+        int32_t imu_rate_; // [Hz] User defined in YAML file
+        int32_t imu_calibration_timestamps_ = 5*833; // [s]
 
         // Camera and IMU rate bounds
-        int imu_rate_max_ = 833; // [Hz] this is the frequency that the IMU is sampling at
-        int camera_rate_max_ = 168; // [FPS] max frame rate that the camera can achieve: https://www.baslerweb.com/en/shop/a2a1920-168mgc/
-        int camera_rate_min_ = 5; // [FPS] TO-DO: think about this more deeply, I just made this up 
+        int32_t imu_rate_max_ = 833; // [Hz] this is the frequency that the IMU is sampling at
+        int32_t camera_rate_max_ = 168; // [FPS] max frame rate that the camera can achieve: https://www.baslerweb.com/en/shop/a2a1920-168mgc/
+        int32_t camera_rate_min_ = 5; // [FPS] TO-DO: think about this more deeply, I just made this up 
 
         // Counter to keep track of the number of calibration timestamps that have been received
         int calibration_timestamp_counter_ = 0;
