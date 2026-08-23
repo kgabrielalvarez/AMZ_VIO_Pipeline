@@ -1,4 +1,11 @@
 can_driver:
   ros__parameters:
-    imu_rate: 200 # Hz 
+    # Acceptable IMU rates:
+    # 1. 26 Hz
+    # 2. 52 Hz
+    # 3. 104 Hz
+    # 4. 208 Hz
+    # 5. 416 Hz
+    # 6. 833 Hz
+    imu_rate: 200 # Hz
     camera_rate: 50 # FPS
