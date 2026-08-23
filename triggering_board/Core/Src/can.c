@@ -149,7 +149,7 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
 		case CAL_IMU:
 		case CAL_CAM:
 		case RUN:
-			state_transition_requested = true;
+			state_transition_requested_flag = true;
 			break;
 		default:
 			error_state = REQUESTED_TRANSITION_TO_INVALID_STATE,

@@ -13,7 +13,7 @@ uint8_t triggering_board_state = STOP;
 error_code_t error_state = NO_ERRORS;
 
 // Flags
-volatile bool state_transition_requested = false;
+volatile bool state_transition_requested_flag = false;
 
 /* Declare external variables ------------------------------------------------*/
 extern FDCAN_HandleTypeDef hfdcan3;
@@ -29,14 +29,19 @@ static float acceleration_mg[3];
 static float angular_rate_mdps[3];
 
 // Timestamps
-// Used during IMU calibration
+// 1. Used during IMU calibration
 static uint32_t imu_timestamp;
 static uint32_t mcu_timestamp;
-// Used during nominal operation
+// 2. Used for IMU messages during nominal operation
 static uint32_t timestamp;
+// 3. Used for camera messages during nominal operation
+static uint32_t cam_timestamp;
+
+// Counter to keep track of the number of calibration timestamps that have been received
+int32_t calibration_timestamp_counter = 0;
 
 // Flags
-static bool drdy_flag;
+static volatile bool drdy_flag = false;
 
 /* Declare file-scope functions ----------------------------------------------*/
 
@@ -57,7 +62,7 @@ static void transition_to_RUN(void);
 void state_machine_handler(void) {
 
 	// Check whether state transition needs to be performed
-	if (state_transition_requested) {
+	if (state_transition_requested_flag) {
 
 		// Perform state transition
 		switch (RxData3[0]) {
@@ -79,11 +84,11 @@ void state_machine_handler(void) {
 		}
 
 		// Reset transition flag
-		state_transition_requested = false;
+		state_transition_requested_flag = false;
 
 		// Send CAN message confirming that transition was performed
 		TxData3[0] = triggering_board_state;
-		memset(&TxData3[1], 0, (BUFFER_SIZE-1)*sizeof(uint8_t));
+		memset(&TxData3[1], 0, BUFFER_SIZE-1);
 		TxHeader3.Identifier = STATE_CAN_ID;
 		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
 			error_state = FAILED_TO_SEND_CAN_STATE_MESSAGE;
@@ -114,10 +119,46 @@ void state_machine_handler(void) {
 /* Define state execution functions ------------------------------------------*/
 
 void execute_STOP(void) {
-
+	// Do nothing
 }
 
 void execute_CAL_IMU(void) {
+
+	// Check that there is an IMU measurement ready
+	if (drdy_flag != true) {
+		// IMU measurement isn't ready so there is nothing to do
+		return;
+	}
+
+	// Check if we are done with the CAL_IMU phase
+	if (calibration_timestamp_counter == imu_calibration_timestamps) {
+		// Send CAN message notifying that CAL_IMU phase is complete
+		TxData3[0] = FINISHED_CAN_MSG;
+		memset(&TxData3[1], 0, BUFFER_SIZE-1);
+		TxHeader3.Identifier = FINISHED_CAN_ID;
+		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+			error_state = FAILED_TO_SEND_CAN_FINISHED_MESSAGE;
+			Error_Handler();
+		}
+		// Reset counter
+		calibration_timestamp_counter = 0;
+	}
+
+	// Read IMU timestamp
+	read_imu_timestamp(&imu_timestamp);
+
+	// Send CAN message with IMU and MCU timestamps
+	memcpy(&TxData3[0], &imu_timestamp, sizeof(uint32_t));
+	memcpy(&TxData3[4], &mcu_timestamp, sizeof(uint32_t));
+	memset(&TxData3[8], 0, BUFFER_SIZE-8);
+	TxHeader3.Identifier = TIMESTAMPS_CAN_ID;
+	if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+		error_state = FAILED_TO_SEND_CAN_TIMESTAMPS_MESSAGE;
+		Error_Handler();
+	}
+
+	// Update counter
+	calibration_timestamp_counter++;
 
 }
 
@@ -157,6 +198,10 @@ void transition_to_CAL_IMU(void) {
 
 	// Read relevant data
 	memcpy(&imu_calibration_timestamps, &RxData3[1], sizeof(int32_t));
+	memcpy(&imu_rate, &RxData3[5], sizeof(int32_t));
+
+	// Configure IMU for timestamp calibration
+	configure_imu(imu_rate);
 
 }
 
@@ -171,8 +216,7 @@ void transition_to_CAL_CAM(void) {
 	triggering_board_state = CAL_CAM;
 
 	// Read relevant data
-	memcpy(&imu_rate, &RxData3[1], sizeof(int32_t));
-	memcpy(&camera_rate, &RxData3[5], sizeof(int32_t));
+	memcpy(&camera_rate, &RxData3[1], sizeof(int32_t));
 
 }
 
@@ -187,13 +231,19 @@ void transition_to_RUN(void) {
 	triggering_board_state = RUN;
 
 	// Read relevant data
-	memcpy(&imu_rate, &RxData3[1], sizeof(int32_t));
-	memcpy(&camera_rate, &RxData3[5], sizeof(int32_t));
+	memcpy(&camera_rate, &RxData3[1], sizeof(int32_t));
 
 }
 
 /* Define interrupt callbacks ------------------------------------------------*/
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-
+	switch (GPIO_Pin) {
+		case IMU_INT1_Pin:
+			drdy_flag = true;
+			break;
+		default:
+			error_state = INTERRUPT_TRIGGERED_ON_UNKOWN_PIN;
+			Error_Handler();
+	}
 }

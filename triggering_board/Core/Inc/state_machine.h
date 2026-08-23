@@ -34,9 +34,15 @@ typedef enum {
 	INCORRECT_CAN_ID,
 	REQUESTED_TRANSITION_TO_INVALID_STATE,
 	FAILED_TO_SEND_CAN_STATE_MESSAGE,
+	FAILED_TO_SEND_CAN_TIMESTAMPS_MESSAGE,
+	FAILED_TO_SEND_CAN_FINISHED_MESSAGE,
 
 	// IMU
 	DEN_MEASUREMENTS_NOT_STAMPED,
+	REQUESTED_IMU_RATE_NOT_AVAILABLE,
+
+	// MISCELLANEOUS
+	INTERRUPT_TRIGGERED_ON_UNKOWN_PIN
 
 } error_code_t;
 
@@ -48,7 +54,7 @@ extern uint8_t triggering_board_state;
 extern error_code_t error_state;
 
 // Flags
-extern volatile bool state_transition_requested;
+extern volatile bool state_transition_requested_flag;
 
 /* Declare functions ---------------------------------------------------------*/
 

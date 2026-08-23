@@ -30,6 +30,9 @@
 #define CAL_CAM_FRAME_LENGTH        5 // state (1 byte) + camera_calibration_rate_ (4 bytes)
 #define RUN_FRAME_LENGTH            5 // state (1 byte) + camera_rate_ (4 bytes)
 
+// Can message specifying that CAL_IMU phase is complete
+#define FINISHED_CAN_MSG         0xFF
+
 // Triggering board state
 enum class triggering_board_state : uint8_t {
     STOP = 0,       // Triggering board not active
@@ -118,7 +121,7 @@ class can_driver : public rclcpp::Node {
         int32_t camera_rate_min_ = 5; // [FPS] TO-DO: think about this more deeply, I just made this up 
 
         // Counter to keep track of the number of calibration timestamps that have been received
-        int calibration_timestamp_counter_ = 0;
+        int32_t calibration_timestamp_counter_ = 0;
 
         // Triggering board state and requested state to transition to
         triggering_board_state triggering_board_state_;

@@ -24,8 +24,6 @@ static stmdev_ctx_t dev_ctx;
 
 // INT1 and INT2 configuration
 static asm330lhhxg1_pin_int1_route_t int1_route;
-static asm330lhhxg1_den_mode_t den_mode;
-static asm330lhhxg1_den_lh_t den_lh;
 
 /* Declare external variables ------------------------------------------------*/
 extern SPI_HandleTypeDef hspi2;
@@ -82,7 +80,7 @@ void platform_delay(uint32_t ms) {
   HAL_Delay(ms);
 }
 
-void configure_imu(void) {
+void configure_imu(int32_t rate) {
 
     // Initialize mems driver interface
     dev_ctx.write_reg = platform_write;
@@ -110,67 +108,56 @@ void configure_imu(void) {
     asm330lhhxg1_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
 
     // Set Output Data Rate
-    asm330lhhxg1_xl_data_rate_set(&dev_ctx, ASM330LHHXG1_XL_ODR_833Hz);
-    asm330lhhxg1_gy_data_rate_set(&dev_ctx, ASM330LHHXG1_GY_ODR_833Hz);
+    asm330lhhxg1_odr_xl_t accelerometer_rate;
+    asm330lhhxg1_odr_g_t gyroscope_rate;
+    switch (rate) {
+    	case 26:
+    		accelerometer_rate = ASM330LHHXG1_XL_ODR_26Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_26Hz;
+			break;
+		case 52:
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_52Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_52Hz;
+			break;
+		case 104:
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_104Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_104Hz;
+			break;
+		case 208:
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_208Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_208Hz;
+			break;
+		case 416:
+			// NOTE: In the datasheet it says 416 Hz but in the enum that's not an option
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_417Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_417Hz;
+			break;
+		case 833:
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_833Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_833Hz;
+			break;
+		default:
+			error_state = REQUESTED_IMU_RATE_NOT_AVAILABLE;
+			Error_Handler();
+    }
+    asm330lhhxg1_xl_data_rate_set(&dev_ctx, accelerometer_rate);
+    asm330lhhxg1_gy_data_rate_set(&dev_ctx, gyroscope_rate);
 
     // Set full scale
     asm330lhhxg1_xl_full_scale_set(&dev_ctx, ASM330LHHXG1_4g);
     asm330lhhxg1_gy_full_scale_set(&dev_ctx, ASM330LHHXG1_500dps);
-
-}
-
-void configure_imu_without_DEN(void) {
 
 	// Generate interrupt on INT1 when accelerometer data is ready
 	asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
 	int1_route.int1_ctrl.int1_drdy_xl = PROPERTY_ENABLE;
 	asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
 
-}
-
-void configure_imu_with_DEN(void) {
-
-	// Configure DEN
-	// DEN procedure:
-	// 1. STM32 sends active high signal to INT2 pin (DEN)
-	// 2. IMU stores measurements in output registers
-	// 3. IMU sends active high signal on INT1 pin
-	// 4. STM32 reads measurements
-
-	// Set INT1_CTRL register to trigger data ready (DRDY) flag when DEN is triggered
-	asm330lhhxg1_pin_int1_route_get(&dev_ctx, &int1_route);
-	int1_route.int1_ctrl.den_drdy_flag = PROPERTY_ENABLE;
-	asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
-
-	// Set DEN to be in "level latched" mode in CTRL6_C register
-	asm330lhhxg1_den_mode_get(&dev_ctx, &den_mode);
-	den_mode = ASM330LHHXG1_LEVEL_LETCHED;
-	asm330lhhxg1_den_mode_set(&dev_ctx, den_mode);
-
-	// Set DEN to be "active high" in CTRL9_XL register
-	asm330lhhxg1_den_polarity_get(&dev_ctx, &den_lh);
-	den_lh = ASM330LHHXG1_DEN_ACT_HIGH;
-	asm330lhhxg1_den_polarity_set(&dev_ctx, den_lh);
-
-	// Stamp DEN value in z-axis accelerometer LSB (CTRL9_XL register)
-	asm330lhhxg1_den_mark_axis_x_set(&dev_ctx, 0);
-	asm330lhhxg1_den_mark_axis_y_set(&dev_ctx, 0);
-	asm330lhhxg1_den_mark_axis_z_set(&dev_ctx, 1);
-	// This last command does two things:
-	// 1. Stamp in z-axis accelerometer
-	// 2. Extends DEN functionality to accelerometer: DEN_XL_EN = 1
-	// Source: https://github.com/STMicroelectronics/asm330lhhxg1-pid/issues/1#issuecomment-4864940543
-	asm330lhhxg1_den_enable_set(&dev_ctx, ASM330LHHXG1_STAMP_IN_XL_DATA);
-	// The "asm330lhhxg1_den_enable_set" function does not work correctly, it sets DEN_XL_G to 1 (as expected)
-	// but it does not set DEN_XL_EN to 1, therefore, this has to be done manually.
-	uint8_t buffer[8];
-	platform_read(&hspi2, 0x18, buffer, 1);
-	buffer[0] = buffer[0] | 0x08;
-	platform_write(&hspi2, 0x18, buffer, 1);
+	// Enable timestamps
+	asm330lhhxg1_timestamp_set(&dev_ctx, PROPERTY_ENABLE);
 
 }
 
-void read_measurements(float acceleration_mg[3], float angular_rate_mdps[3]) {
+void read_imu_measurements(float acceleration_mg[3], float angular_rate_mdps[3]) {
 
 	// Flag to check that data is ready
 	uint8_t data_ready;
@@ -182,13 +169,6 @@ void read_measurements(float acceleration_mg[3], float angular_rate_mdps[3]) {
 	if (data_ready) {
 		memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
 		asm330lhhxg1_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
-
-		// Check that x-axis accelerometer reading is stamped
-		if ((data_raw_acceleration[2] & 0x01) != 0x01) {
-			error_state = DEN_MEASUREMENTS_NOT_STAMPED;
-			Error_Handler();
-		}
-
 		acceleration_mg[0] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[0]);
 		acceleration_mg[1] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[1]);
 		acceleration_mg[2] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[2]);
@@ -206,4 +186,8 @@ void read_measurements(float acceleration_mg[3], float angular_rate_mdps[3]) {
 		angular_rate_mdps[2] = asm330lhhxg1_from_fs500dps_to_mdps(data_raw_angular_rate[2]);
 	}
 
+}
+
+void read_imu_timestamp(uint32_t *timestamp) {
+	asm330lhhxg1_timestamp_raw_get(&dev_ctx, timestamp);
 }

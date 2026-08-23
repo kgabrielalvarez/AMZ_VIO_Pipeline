@@ -365,7 +365,7 @@ void can_driver::read_finished_can_msg() {
     // Confirm that message value is correct
     uint8_t raw_message;
     std::memcpy(&raw_message, &frame_.data[0], sizeof(uint8_t));
-    if (raw_message != 0x01) {
+    if (raw_message != FINISHED_CAN_MSG) {
         throw std::runtime_error("Finished IMU calibration message is incorrect");
     }
 

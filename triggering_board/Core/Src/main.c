@@ -102,7 +102,6 @@ int main(void)
   MX_USB_PCD_Init();
   /* USER CODE BEGIN 2 */
 
-  configure_imu();
   configure_fdcan();
 
   /* USER CODE END 2 */
