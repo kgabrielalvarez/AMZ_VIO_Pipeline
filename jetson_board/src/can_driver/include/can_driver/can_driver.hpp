@@ -13,17 +13,22 @@
 // Include ROS2 libraries
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/u_int8.hpp"
+#include "builtin_interfaces/msg/time.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "amz_vio_pipeline_msgs/msg/calibration_timestamps.hpp"
 
+// CAN message IDs
 #define STATE_CAN_ID            0x001 // Highest priority
-#define FINISHED_CAN_ID         0x002 // Second highest priority
-#define TIMESTAMPS_CAN_ID       0x003 // Third highest priority
-#define IMU_CAN_ID              0x004 // Lowest priority
+#define FINISHED_CAN_ID         0x002
+#define TIMESTAMPS_CAN_ID       0x003
+#define CAM_CAN_ID              0x004
+#define IMU_CAN_ID              0x005 // Lowest priority
+
+// State CAN message frame lengths
 #define STOP_FRAME_LENGTH           1 // state (1 byte)
-#define CAL_IMU_FRAME_LENGTH        5 // state (1 byte) + imu_calibration_duration_ (4 bytes)
-#define CAL_CAM_FRAME_LENGTH        9 // state (1 byte) + imu_rate_ (4 bytes) + camera_calibration_rate_ (4 bytes)
-#define RUN_FRAME_LENGTH            9 // state (1 byte) + imu_rate_ (4 bytes) + camera_rate_ (4 bytes)
+#define CAL_IMU_FRAME_LENGTH        9 // state (1 byte) + imu_calibration_duration_ (4 bytes) + imu_rate_ (4 bytes)
+#define CAL_CAM_FRAME_LENGTH        5 // state (1 byte) + camera_calibration_rate_ (4 bytes)
+#define RUN_FRAME_LENGTH            5 // state (1 byte) + camera_rate_ (4 bytes)
 
 // Triggering board state
 enum class triggering_board_state : uint8_t {
@@ -83,13 +88,17 @@ class can_driver : public rclcpp::Node {
         uint32_t imu_timestamp_;
         uint32_t mcu_timestamp_;
 
+        // Variables to publish in camera_timestamp msg
+        uint32_t cam_timestamp_;
+
         // Unit conversion factors
         float mg_to_ms2_ = 9.81/1000.0;
         float dps_to_rps_ = 3.1415926535/180.0;
 
         // Messages to publish
-        sensor_msgs::msg::Imu imu_msg_;
         amz_vio_pipeline_msgs::msg::CalibrationTimestamps calibration_timestamps_msg_;
+        builtin_interfaces::msg::Time cam_msg_;
+        sensor_msgs::msg::Imu imu_msg_;
 
         // Write to CAN Bus
         ssize_t num_bytes_write_;
@@ -105,7 +114,6 @@ class can_driver : public rclcpp::Node {
         int32_t imu_calibration_timestamps_ = 5*833; // [s]
 
         // Camera and IMU rate bounds
-        int32_t imu_rate_max_ = 833; // [Hz] this is the frequency that the IMU is sampling at
         int32_t camera_rate_max_ = 168; // [FPS] max frame rate that the camera can achieve: https://www.baslerweb.com/en/shop/a2a1920-168mgc/
         int32_t camera_rate_min_ = 5; // [FPS] TO-DO: think about this more deeply, I just made this up 
 
@@ -118,8 +126,8 @@ class can_driver : public rclcpp::Node {
 
         // Publishers and subscriber
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_and_timestamp_publisher_;
-        rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CalibrationTimestamps>::SharedPtr 
-            calibration_timestamps_publisher_;
+        rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CalibrationTimestamps>::SharedPtr calibration_timestamps_publisher_;
+        rclcpp::Publisher<builtin_interfaces::msg::Time>::SharedPtr cam_timestamp_publisher_;
         rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr state_publisher_;
         rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr state_subscriber_;
 
@@ -136,6 +144,7 @@ class can_driver : public rclcpp::Node {
         void read_state_can_msg();
         void read_finished_can_msg();
         void read_timestamps_can_msg();
+        void read_cam_can_msg();
         void read_imu_can_msg();
         std::string state_to_string(triggering_board_state state);
 

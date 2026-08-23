@@ -11,6 +11,7 @@ can_driver::can_driver() : Node("can_driver") {
     imu_and_timestamp_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu_and_timestamps", 10);
     calibration_timestamps_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::CalibrationTimestamps>
         ("calibration_timestamps", 10);
+    cam_timestamp_publisher_ = this->create_publisher<builtin_interfaces::msg::Time>("camera_timestamps", 10);
     state_publisher_ = this->create_publisher<std_msgs::msg::UInt8>("triggering_board_state", 10);
     state_subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
         10, std::bind(&can_driver::transition_handler_callback, this, std::placeholders::_1));
@@ -89,15 +90,30 @@ void can_driver::transition_to_CAL_IMU() {
         throw std::runtime_error("Transitioning to CAL_IMU from " + 
             state_to_string(triggering_board_state_) + " is invalid");
     }
-    
+    // Update imu rate
+    imu_rate_ = this->get_parameter("imu_rate").as_int();
+    // 2. Check that IMU rate is valid
+    switch (imu_rate_) {
+        case 26:
+        case 52:
+        case 104:
+        case 208:
+        case 416:
+        case 833:
+            break;
+        default:
+            throw std::runtime_error("IMU rate of " + 
+            std::to_string(imu_rate_) + " Hz is invalid");
+    }
     // Perform state transition
     triggering_board_state_ = triggering_board_state::CAL_IMU;
 
     // Configure CAN socket
     can_driver::configure_can_socket();
 
-    // Add number of IMU calibration timestamps to CAN message
+    // Add number of IMU calibration timestamps and IMU rate to CAN message
     std::memcpy(&cal_imu_frame_.data[1], &imu_calibration_timestamps_, sizeof(int32_t));
+    std::memcpy(&cal_imu_frame_.data[5], &imu_rate_, sizeof(int32_t));
     
     // Send triggering board command to enter CAL_IMU state
     num_bytes_write_ = write(socket_, &cal_imu_frame_, sizeof(struct canfd_frame));
@@ -123,19 +139,11 @@ void can_driver::transition_to_CAL_CAM() {
         throw std::runtime_error("Transitioning to CAL_CAM from " + 
             state_to_string(triggering_board_state_) + " is invalid");
     }
-    // Update imu rate
-    imu_rate_ = this->get_parameter("imu_rate").as_int();
-    // 2. Check that IMU rate is within bounds
-    if (imu_rate_ > imu_rate_max_) {
-        throw std::runtime_error("IMU rate is above max IMU rate");
-    }
-
     // Perform state transition
     triggering_board_state_ = triggering_board_state::CAL_CAM;
 
-    // Add IMU rate and camera rate to CAN message
-    std::memcpy(&cal_cam_frame_.data[1], &imu_rate_, sizeof(int32_t));
-    std::memcpy(&cal_cam_frame_.data[5], &camera_calibration_rate_, sizeof(int32_t));
+    // Add camera calibration rate to CAN message
+    std::memcpy(&cal_cam_frame_.data[1], &camera_calibration_rate_, sizeof(int32_t));
 
     // Send triggering board command to enter CAL_CAM state
     num_bytes_write_ = write(socket_, &cal_cam_frame_, sizeof(struct canfd_frame));
@@ -161,31 +169,21 @@ void can_driver::transition_to_RUN() {
         throw std::runtime_error("Transitioning to RUN from " + 
             state_to_string(triggering_board_state_) + " is invalid");
     }
-    // Update IMU and camera rates
-    imu_rate_ = this->get_parameter("imu_rate").as_int();
+    // Update camera rate
     camera_rate_ = this->get_parameter("camera_rate").as_int();
-    // 2. Check that IMU rate is within bounds
-    if (imu_rate_ > imu_rate_max_) {
-        throw std::runtime_error("IMU rate is above max IMU rate");
-    }
-    // 3. Check that camera rate is within bounds
+    // 2. Check that camera rate is within bounds
     if (camera_rate_ < camera_rate_min_) {
         throw std::runtime_error("Camera rate is below min camera rate");
     }
     if (camera_rate_ > camera_rate_max_) {
         throw std::runtime_error("Camera rate is above max camera rate");
     }
-    // Check that IMU rate is a multiple of camera rate
-    if ((imu_rate_ % camera_rate_) != 0) {
-        throw std::runtime_error("IMU rate is not a multiple of camera rate");
-    }
 
     // Perform state transition
     triggering_board_state_ = triggering_board_state::RUN;        
 
     // Add IMU rate and camera rate to CAN message
-    std::memcpy(&run_frame_.data[1], &imu_rate_, sizeof(int32_t));
-    std::memcpy(&run_frame_.data[5], &camera_rate_, sizeof(int32_t));
+    std::memcpy(&run_frame_.data[1], &camera_rate_, sizeof(int32_t));
 
     // Send triggering board command to enter RUN state
     num_bytes_write_ = write(socket_, &run_frame_, sizeof(struct canfd_frame));
@@ -303,6 +301,9 @@ void can_driver::read_can() {
             case TIMESTAMPS_CAN_ID:
                 read_timestamps_can_msg();
                 break;
+            case CAM_CAN_ID:
+                read_cam_can_msg();
+                break;
             case IMU_CAN_ID:
                 read_imu_can_msg();
                 break;
@@ -407,6 +408,24 @@ void can_driver::read_timestamps_can_msg() {
 
 }
 
+void can_driver::read_cam_can_msg() {
+
+    // Check that message was sent from correct state
+    if ((triggering_board_state_ != triggering_board_state::CAL_CAM) ||
+        (triggering_board_state_ != triggering_board_state::RUN)) {
+        throw std::runtime_error("CAM CAN message sent from outside of CAL_CAM or RUN state");
+    }
+
+    // Pass CAN bus frame to ROS2 message
+    std::memcpy(&cam_timestamp_, &frame_.data[0], sizeof(uint32_t));
+    cam_msg_.sec = cam_timestamp_ / 1000;
+    cam_msg_.nanosec = (cam_timestamp_ % 1000) * 1000000;
+
+    // Publish timestamp
+    cam_timestamp_publisher_->publish(cam_msg_);
+    
+}
+
 void can_driver::read_imu_can_msg() {
 
     // Check that message was sent from correct state
@@ -415,7 +434,7 @@ void can_driver::read_imu_can_msg() {
         throw std::runtime_error("IMU CAN message sent from outside of CAL_CAM or RUN state");
     }
     
-    // Convert uint8_t to float
+    // Pass CAN bus frame to ROS2 message
     std::memcpy(&acceleration_x_.as_bytes[0], &frame_.data[0], sizeof(float));
     std::memcpy(&acceleration_y_.as_bytes[0], &frame_.data[4], sizeof(float));
     std::memcpy(&acceleration_z_.as_bytes[0], &frame_.data[8], sizeof(float));
