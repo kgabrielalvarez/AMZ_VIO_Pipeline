@@ -63,13 +63,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define PWR_FLAG_Pin GPIO_PIN_13
 #define PWR_FLAG_GPIO_Port GPIOC
-#define TRIGGER_Pin GPIO_PIN_5
-#define TRIGGER_GPIO_Port GPIOA
-#define EXP_ACT_Pin GPIO_PIN_6
-#define EXP_ACT_GPIO_Port GPIOA
 #define IMU_INT1_Pin GPIO_PIN_11
 #define IMU_INT1_GPIO_Port GPIOB
-#define IMU_INT1_EXTI_IRQn EXTI15_10_IRQn
 #define CS_Pin GPIO_PIN_9
 #define CS_GPIO_Port GPIOA
 #define VSENSE_Pin GPIO_PIN_4
