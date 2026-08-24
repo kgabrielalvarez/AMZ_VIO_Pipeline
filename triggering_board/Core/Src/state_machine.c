@@ -14,7 +14,7 @@ volatile bool state_transition_requested_flag = false;
 
 /* Declare external variables ------------------------------------------------*/
 extern FDCAN_HandleTypeDef hfdcan3;
-extern TIM_HandleTypeDef htim2;
+//extern TIM_HandleTypeDef htim2;
 
 /* Declare file-scope variables ----------------------------------------------*/
 // Triggering board state
@@ -150,7 +150,7 @@ void execute_CAL_IMU(void) {
 	}
 
 	// Read IMU timestamp
-	read_imu_timestamp(&imu_timestamp);
+//	read_imu_timestamp(&imu_timestamp);
 
 	// Send CAN message with IMU and MCU timestamps
 	memcpy(&TxData3[0], &imu_timestamp, sizeof(uint32_t));
@@ -205,17 +205,17 @@ void transition_to_CAL_IMU(void) {
 	memcpy(&imu_calibration_timestamps, &RxData3[1], sizeof(int32_t));
 	memcpy(&imu_rate, &RxData3[5], sizeof(int32_t));
 
-	// Configure IMU
-	configure_imu(imu_rate);
-
-	// Start the timer if it hasn't yet been started
-	if (tim2_started_flag == false) {
-		  HAL_TIM_Base_Start_IT(&htim2);
-		  tim2_started_flag = true;
-	}
-
-	// Reset the timer
-	__HAL_TIM_SET_COUNTER(&htim2, 0);
+//	// Configure IMU
+//	configure_imu(imu_rate);
+//
+//	// Start the timer if it hasn't yet been started
+//	if (tim2_started_flag == false) {
+//		  HAL_TIM_Base_Start_IT(&htim2);
+//		  tim2_started_flag = true;
+//	}
+//
+//	// Reset the timer
+//	__HAL_TIM_SET_COUNTER(&htim2, 0);
 
 }
 
@@ -250,19 +250,19 @@ void transition_to_RUN(void) {
 }
 
 /* Define timer callbacks ----------------------------------------------------*/
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-{
-	switch (htim->Channel) {
-		case HAL_TIM_ACTIVE_CHANNEL_3: // EXP_ACT triggered
-			// TO-DO
-
-		case HAL_TIM_ACTIVE_CHANNEL_4: // IMU_INT1 triggered
-			drdy_flag = true;
-			mcu_timestamp = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_4);
-
-		default:
-			error_state = INPUT_CAPTURE_TRIGGERED_ON_UNKNOWN_CHANNEL;
-			Error_Handler();
-
-  }
-}
+//void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+//{
+//	switch (htim->Channel) {
+//		case HAL_TIM_ACTIVE_CHANNEL_3: // EXP_ACT triggered
+//			// TO-DO
+//
+//		case HAL_TIM_ACTIVE_CHANNEL_4: // IMU_INT1 triggered
+//			drdy_flag = true;
+//			mcu_timestamp = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_4);
+//
+//		default:
+//			error_state = INPUT_CAPTURE_TRIGGERED_ON_UNKNOWN_CHANNEL;
+//			Error_Handler();
+//
+//  }
+//}

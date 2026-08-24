@@ -42,9 +42,7 @@ typedef enum {
 	REQUESTED_IMU_RATE_NOT_AVAILABLE,
 
 	// MISCELLANEOUS
-	INPUT_CAPTURE_TRIGGERED_ON_UNKNOWN_CHANNEL,
-
-	SUCCESFULLY_CONFIGURED_IMU // to-do delete!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	INPUT_CAPTURE_TRIGGERED_ON_UNKNOWN_CHANNEL
 
 } error_code_t;
 
