@@ -6,9 +6,6 @@
 #include "string.h"
 
 /* Define global variables ---------------------------------------------------*/
-// Triggering board state
-uint8_t triggering_board_state = STOP;
-
 // Error state
 error_code_t error_state = NO_ERRORS;
 
@@ -17,8 +14,12 @@ volatile bool state_transition_requested_flag = false;
 
 /* Declare external variables ------------------------------------------------*/
 extern FDCAN_HandleTypeDef hfdcan3;
+extern TIM_HandleTypeDef htim2;
 
 /* Declare file-scope variables ----------------------------------------------*/
+// Triggering board state
+static triggering_board_state_t triggering_board_state = STOP;
+
 // IMU and camera rates and number of calibration timestamps
 static int32_t imu_rate; // [Hz]
 static int32_t camera_rate; // [FPS]
@@ -42,6 +43,7 @@ int32_t calibration_timestamp_counter = 0;
 
 // Flags
 static volatile bool drdy_flag = false;
+static volatile bool tim2_started_flag = false;
 
 /* Declare file-scope functions ----------------------------------------------*/
 
@@ -125,10 +127,13 @@ void execute_STOP(void) {
 void execute_CAL_IMU(void) {
 
 	// Check that there is an IMU measurement ready
-	if (drdy_flag != true) {
+	if (drdy_flag == false) {
 		// IMU measurement isn't ready so there is nothing to do
 		return;
 	}
+
+	// Reset flag
+	drdy_flag = false;
 
 	// Check if we are done with the CAL_IMU phase
 	if (calibration_timestamp_counter == imu_calibration_timestamps) {
@@ -200,8 +205,17 @@ void transition_to_CAL_IMU(void) {
 	memcpy(&imu_calibration_timestamps, &RxData3[1], sizeof(int32_t));
 	memcpy(&imu_rate, &RxData3[5], sizeof(int32_t));
 
-	// Configure IMU for timestamp calibration
+	// Configure IMU
 	configure_imu(imu_rate);
+
+	// Start the timer if it hasn't yet been started
+	if (tim2_started_flag == false) {
+		  HAL_TIM_Base_Start_IT(&htim2);
+		  tim2_started_flag = true;
+	}
+
+	// Reset the timer
+	__HAL_TIM_SET_COUNTER(&htim2, 0);
 
 }
 
@@ -235,15 +249,20 @@ void transition_to_RUN(void) {
 
 }
 
-/* Define interrupt callbacks ------------------------------------------------*/
+/* Define timer callbacks ----------------------------------------------------*/
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	switch (htim->Channel) {
+		case HAL_TIM_ACTIVE_CHANNEL_3: // EXP_ACT triggered
+			// TO-DO
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-	switch (GPIO_Pin) {
-		case IMU_INT1_Pin:
+		case HAL_TIM_ACTIVE_CHANNEL_4: // IMU_INT1 triggered
 			drdy_flag = true;
-			break;
+			mcu_timestamp = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_4);
+
 		default:
-			error_state = INTERRUPT_TRIGGERED_ON_UNKOWN_PIN;
+			error_state = INPUT_CAPTURE_TRIGGERED_ON_UNKNOWN_CHANNEL;
 			Error_Handler();
-	}
+
+  }
 }

@@ -42,13 +42,13 @@ typedef enum {
 	REQUESTED_IMU_RATE_NOT_AVAILABLE,
 
 	// MISCELLANEOUS
-	INTERRUPT_TRIGGERED_ON_UNKOWN_PIN
+	INPUT_CAPTURE_TRIGGERED_ON_UNKNOWN_CHANNEL,
+
+	SUCCESFULLY_CONFIGURED_IMU // to-do delete!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 } error_code_t;
 
 /* Declare global variables ---------------------------------------------------*/
-// Triggering board state
-extern uint8_t triggering_board_state;
 
 // Error state
 extern error_code_t error_state;
