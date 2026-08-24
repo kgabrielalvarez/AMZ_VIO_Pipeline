@@ -124,8 +124,6 @@ void can_driver::transition_to_CAL_IMU() {
     }
 
     // Notify
-    RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        state_to_string(triggering_board_state_));
     RCLCPP_INFO(this->get_logger(), "Number of IMU calibration timestamps = %d ", 
         imu_calibration_timestamps_);
 
@@ -154,8 +152,6 @@ void can_driver::transition_to_CAL_CAM() {
     }
 
     // Notify
-    RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        state_to_string(triggering_board_state_));
     RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", 
         imu_rate_, camera_calibration_rate_);
 
@@ -194,8 +190,6 @@ void can_driver::transition_to_RUN() {
     }
 
     // Notify
-    RCLCPP_INFO(this->get_logger(), "Triggering board entering %s", 
-        state_to_string(triggering_board_state_));
     RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", imu_rate_, camera_rate_);
 
 }
@@ -353,6 +347,9 @@ void can_driver::read_state_can_msg() {
             throw std::runtime_error("Triggering board internal state is not valid");
 
     }
+
+    // Notify
+    RCLCPP_INFO(this->get_logger(), "Triggering board has entered %s", state_to_string(triggering_board_state_).c_str());
 }
 
 void can_driver::read_finished_can_msg() {
@@ -381,6 +378,9 @@ void can_driver::read_finished_can_msg() {
     // Create message to publish
     std_msgs::msg::UInt8 finished_msg;
     finished_msg.data = static_cast<uint8_t>(triggering_board_state::CAL_CAM);
+
+    // Wait for all the timestamps CAN messages to arrive before transitioning
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     // Request transition to CAM_CAL state
     state_publisher_->publish(finished_msg);

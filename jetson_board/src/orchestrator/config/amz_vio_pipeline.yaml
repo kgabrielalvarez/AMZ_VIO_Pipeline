@@ -7,5 +7,5 @@ can_driver:
     # 4. 208 Hz
     # 5. 416 Hz
     # 6. 833 Hz
-    imu_rate: 200 # Hz
+    imu_rate: 208 # Hz
     camera_rate: 50 # FPS

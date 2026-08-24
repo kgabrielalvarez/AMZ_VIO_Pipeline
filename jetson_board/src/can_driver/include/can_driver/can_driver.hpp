@@ -16,11 +16,13 @@
 #include "builtin_interfaces/msg/time.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "amz_vio_pipeline_msgs/msg/calibration_timestamps.hpp"
+#include <thread>
+#include <chrono>
 
 // CAN message IDs
 #define STATE_CAN_ID            0x001 // Highest priority
-#define FINISHED_CAN_ID         0x002
-#define TIMESTAMPS_CAN_ID       0x003
+#define TIMESTAMPS_CAN_ID       0x002
+#define FINISHED_CAN_ID         0x003
 #define CAM_CAN_ID              0x004
 #define IMU_CAN_ID              0x005 // Lowest priority
 
@@ -114,7 +116,7 @@ class can_driver : public rclcpp::Node {
         int32_t camera_rate_; // [FPS] User defined in YAML file
         int32_t camera_calibration_rate_ = 10; // [FPS]
         int32_t imu_rate_; // [Hz] User defined in YAML file
-        int32_t imu_calibration_timestamps_ = 5*833; // [s]
+        int32_t imu_calibration_timestamps_ = 5*208; // [s]
 
         // Camera and IMU rate bounds
         int32_t camera_rate_max_ = 168; // [FPS] max frame rate that the camera can achieve: https://www.baslerweb.com/en/shop/a2a1920-168mgc/
