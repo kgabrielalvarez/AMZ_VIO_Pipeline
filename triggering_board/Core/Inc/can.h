@@ -7,8 +7,8 @@
 /* Macros --------------------------------------------------------------------*/
 // IDs of CAN messages
 #define STATE_CAN_ID 		0x001 // Highest priority
-#define FINISHED_CAN_ID		0x002
-#define TIMESTAMPS_CAN_ID	0x003
+#define TIMESTAMPS_CAN_ID	0x002
+#define FINISHED_CAN_ID		0x003
 #define CAM_CAN_ID			0x004
 #define IMU_CAN_ID			0x005 // Lowest priority
 

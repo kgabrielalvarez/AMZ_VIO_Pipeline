@@ -108,40 +108,40 @@ void configure_imu(int32_t rate) {
     asm330lhhxg1_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
 
     // Set Output Data Rate
-//    asm330lhhxg1_odr_xl_t accelerometer_rate;
-//    asm330lhhxg1_odr_g_t gyroscope_rate;
-//    switch (rate) {
-//    	case 26:
-//    		accelerometer_rate = ASM330LHHXG1_XL_ODR_26Hz;
-//			gyroscope_rate = ASM330LHHXG1_GY_ODR_26Hz;
-//			break;
-//		case 52:
-//			accelerometer_rate = ASM330LHHXG1_XL_ODR_52Hz;
-//			gyroscope_rate = ASM330LHHXG1_GY_ODR_52Hz;
-//			break;
-//		case 104:
-//			accelerometer_rate = ASM330LHHXG1_XL_ODR_104Hz;
-//			gyroscope_rate = ASM330LHHXG1_GY_ODR_104Hz;
-//			break;
-//		case 208:
-//			accelerometer_rate = ASM330LHHXG1_XL_ODR_208Hz;
-//			gyroscope_rate = ASM330LHHXG1_GY_ODR_208Hz;
-//			break;
-//		case 416:
-//			// NOTE: In the datasheet it says 416 Hz but in the enum that's not an option
-//			accelerometer_rate = ASM330LHHXG1_XL_ODR_417Hz;
-//			gyroscope_rate = ASM330LHHXG1_GY_ODR_417Hz;
-//			break;
-//		case 833:
-//			accelerometer_rate = ASM330LHHXG1_XL_ODR_833Hz;
-//			gyroscope_rate = ASM330LHHXG1_GY_ODR_833Hz;
-//			break;
-//		default:
-//			error_state = REQUESTED_IMU_RATE_NOT_AVAILABLE;
-//			Error_Handler();
-//    }
-    asm330lhhxg1_xl_data_rate_set(&dev_ctx, ASM330LHHXG1_XL_ODR_833Hz);
-    asm330lhhxg1_gy_data_rate_set(&dev_ctx, ASM330LHHXG1_GY_ODR_833Hz);
+    asm330lhhxg1_odr_xl_t accelerometer_rate;
+    asm330lhhxg1_odr_g_t gyroscope_rate;
+    switch (rate) {
+    	case 26:
+    		accelerometer_rate = ASM330LHHXG1_XL_ODR_26Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_26Hz;
+			break;
+		case 52:
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_52Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_52Hz;
+			break;
+		case 104:
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_104Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_104Hz;
+			break;
+		case 208:
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_208Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_208Hz;
+			break;
+		case 416:
+			// NOTE: In the datasheet it says 416 Hz but in the enum that's not an option
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_417Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_417Hz;
+			break;
+		case 833:
+			accelerometer_rate = ASM330LHHXG1_XL_ODR_833Hz;
+			gyroscope_rate = ASM330LHHXG1_GY_ODR_833Hz;
+			break;
+		default:
+			error_state = REQUESTED_IMU_RATE_NOT_AVAILABLE;
+			Error_Handler();
+    }
+    asm330lhhxg1_xl_data_rate_set(&dev_ctx, accelerometer_rate);
+    asm330lhhxg1_gy_data_rate_set(&dev_ctx, gyroscope_rate);
 
     // Set full scale
     asm330lhhxg1_xl_full_scale_set(&dev_ctx, ASM330LHHXG1_4g);
@@ -153,9 +153,7 @@ void configure_imu(int32_t rate) {
 	asm330lhhxg1_pin_int1_route_set(&dev_ctx, &int1_route);
 
 	// Enable timestamps
-//	asm330lhhxg1_timestamp_set(&dev_ctx, PROPERTY_ENABLE);
-
-	error_state = SUCCESFULLY_CONFIGURED_IMU;
+	asm330lhhxg1_timestamp_set(&dev_ctx, PROPERTY_ENABLE);
 
 }
 
