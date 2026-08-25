@@ -25,6 +25,9 @@ static stmdev_ctx_t dev_ctx;
 // INT1 and INT2 configuration
 static asm330lhhxg1_pin_int1_route_t int1_route;
 
+// Value in FREQ_FINE register
+static int8_t freq_fine;
+
 /* Declare external variables ------------------------------------------------*/
 extern SPI_HandleTypeDef hspi2;
 
@@ -154,6 +157,9 @@ void configure_imu(int32_t rate) {
 
 	// Enable timestamps
 	asm330lhhxg1_timestamp_set(&dev_ctx, PROPERTY_ENABLE);
+
+	// Read freq_fine register
+	asm330lhhxg1_odr_cal_reg_get(&dev_ctx, &freq_fine);
 
 }
 
