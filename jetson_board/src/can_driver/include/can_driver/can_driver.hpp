@@ -36,7 +36,7 @@
 #define FINISHED_CAN_MSG         0xFF
 
 // Resolution of IMU clock
-#define IMU_CLOCK_RESOLUTION       25 // [us/LSB]
+#define IMU_CLOCK_RESOLUTION       1 // [us/LSB]
 
 // Triggering board state
 enum class triggering_board_state : uint8_t {
