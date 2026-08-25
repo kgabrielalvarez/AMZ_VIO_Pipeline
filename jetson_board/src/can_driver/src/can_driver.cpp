@@ -37,7 +37,7 @@ can_driver::can_driver() : Node("can_driver") {
     timeout_.tv_sec = 0;
     timeout_.tv_usec = 100000;
 
-    // Print start of node
+    // Log start of node
     RCLCPP_INFO(this->get_logger(), "can_driver started...");
 
 }
@@ -174,7 +174,6 @@ void can_driver::transition_to_RUN() {
     if (camera_rate_ > camera_rate_max_) {
         throw std::runtime_error("Camera rate is above max camera rate");
     }
-
     // Perform state transition
     triggering_board_state_ = triggering_board_state::RUN;        
 
@@ -397,7 +396,7 @@ void can_driver::read_timestamps_can_msg() {
     // Pass CAN bus frame to ROS2 message
     std::memcpy(&imu_timestamp_, &frame_.data[0], sizeof(uint32_t));
     std::memcpy(&mcu_timestamp_, &frame_.data[4], sizeof(uint32_t));
-    calibration_timestamps_msg_.imu_timestamp = imu_timestamp_ * IMU_CLOCK_RESOLUTION;
+    calibration_timestamps_msg_.imu_timestamp = imu_timestamp_;
     calibration_timestamps_msg_.mcu_timestamp = mcu_timestamp_;
 
     // Publish timestamps

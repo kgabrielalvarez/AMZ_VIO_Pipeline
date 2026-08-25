@@ -16,4 +16,13 @@ def generate_launch_description():
 
     ld.add_action(can_driver_node)
 
+    camera_driver_node = Node(
+        package = "camera_driver",
+        executable = "camera_driver"
+        parameters = [PathJoinSubstitution([
+                      FindPackageShare('orchestrator'), 'config', 'amz_vio_pipeline.yaml'])]
+    )
+
+    ld.add_action(camera_driver_node)
+
     return ld

@@ -9,3 +9,8 @@ can_driver:
     # 6. 833 Hz
     imu_rate: 208 # Hz
     camera_rate: 50 # FPS
+
+camera_driver:
+  ros__parameters:
+    autoexposure_time_lower_limit: 1000.0 # [us] <-- think about this more!!!  I just made something up
+    autoexposure_time_upper_limit: 10000.0 # [us] <-- think about this more!!!  I just made something up

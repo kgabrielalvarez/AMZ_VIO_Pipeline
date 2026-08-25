@@ -3,9 +3,62 @@
 // Constructor
 camera_driver::camera_driver() : Node("camera_driver") {
 
-    // Initialize Publisher
+    // Declare parameters
+    this->declare_parameter("min_exposure_time", 0.0);
+    this->declare_parameter("max_exposure_time", 0.0);
+
+    // Initialize publishers and subscriber
     left_image_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("left_images", 10);
     right_image_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("right_images", 10);
+    state_subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
+        10, std::bind(&camera_driver::transition_handler_callback, this, std::placeholders::_1));
+
+    // Log start of node
+    RCLCPP_INFO(this->get_logger(), "camera_driver started...");
+
+}
+
+// Destructor
+camera_driver::~camera_driver() {
+
+    transition_to_STOP();
+
+}
+
+void camera_driver::transition_to_STOP() {
+
+    // Check that state transition is valid
+    if ((triggering_board_state_ != triggering_board_state::CAL_IMU) &&
+        (triggering_board_state_ != triggering_board_state::CAL_CAM) &&
+        (triggering_board_state_ != triggering_board_state::RUN)) {
+            throw std::runtime_error("Transitioning to STOP from unspecified state is invalid");
+    }
+    // Perform state transition
+    triggering_board_state_ = triggering_board_state::STOP;
+
+    // Stop Pylon
+    cameras_.StopGrabbing();
+    // Wait for thread to stop running
+    if (image_reader_thread_.joinable()) {
+        image_reader_thread_.join();
+    }
+    PylonTerminate();
+
+    // Notify
+    RCLCPP_INFO(this->get_logger(), "Pylon has been terminated");
+
+}
+
+void camera_driver::transition_to_CAL_IMU() {
+
+    // Check that state transition is valid
+    // 1. Check that previous state was STOP
+    if (triggering_board_state_ != triggering_board_state::STOP) {
+        throw std::runtime_error("Transitioning to CAL_IMU from " + 
+            state_to_string(triggering_board_state_) + " is invalid");
+    }
+    // Perform state transition
+    triggering_board_state_ = triggering_board_state::CAL_IMU;
 
     // Initialize Pylon runtime
     PylonInitialize();
@@ -27,7 +80,7 @@ camera_driver::camera_driver() : Node("camera_driver") {
         CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
         RCLCPP_INFO(this->get_logger(), "Left camera line 3: %s", CEnumParameter(left_node_map, "LineSource").GetValue().c_str());
 
-        // Print configuration parameters for right camera
+        // Log configuration parameters for right camera
         INodeMap& right_camera_map = right_camera_.GetNodeMap();
         RCLCPP_INFO(this->get_logger(), "Right camera TriggerSelector: %s", CEnumParameter(right_camera_map, "TriggerSelector").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Right camera TriggerMode: %s", CEnumParameter(right_camera_map, "TriggerMode").GetValue().c_str());
@@ -49,47 +102,108 @@ camera_driver::camera_driver() : Node("camera_driver") {
         RCLCPP_ERROR(this->get_logger(), error.what());
     }
 
+    // Notify
+    RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", state_to_string(triggering_board_state_).c_str());
+
 }
 
-// Destructor
-camera_driver::~camera_driver() {
-    RCLCPP_INFO(this->get_logger(), "Terminating Pylon");
-    cameras_.StopGrabbing();
-    // Wait for thread to stop running
-    if (image_reader_thread_.joinable()) {
-        image_reader_thread_.join();
+void camera_driver::transition_to_CAL_CAM() {
+
+    // Check that state transition is valid
+    // 1. Check that previous state was CAL_IMU
+    if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
+        throw std::runtime_error("Transitioning to CAL_CAM from " + 
+            state_to_string(triggering_board_state_) + " is invalid");
     }
-    PylonTerminate();
+    // Perform state transition
+    triggering_board_state_ = triggering_board_state::CAL_CAM;
+
+    // Configure left camera (master) to use constant exposure
+    left_camera_.Open();
+    INodeMap& left_node_map = left_camera_.GetNodeMap();
+    CEnumParameter(left_node_map, "ExposureAuto").SetValue("Off");
+    CEnumParameter(left_node_map, "ExposureTimeMode").SetValue("Common");
+    CFloatParameter(left_node_map, "ExposureTime").SetValue(constant_exposure_time_);
+
+    // Log configuration parameters
+    RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", 
+        CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
+    RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeMode: %s", 
+        CEnumParameter(left_node_map, "ExposureTimeMode").GetValue().c_str());
+    RCLCPP_INFO(this->get_logger(), "Left camera ExposureTime: %f us", 
+        CFloatParameter(left_node_map, "ExposureTime").GetValue());
+
+    // Notify
+    RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", 
+        state_to_string(triggering_board_state_).c_str());
+
 }
 
-void camera_driver::read_images() {
+void camera_driver::transition_to_RUN() {
 
-    // Smart pointer to receive grabed frames
-    // See https://docs.baslerweb.com/pylonapi/cpp/class_pylon_1_1_c_grab_result_data#function-gettimestamp
-    // for the pointers public functions
-    CGrabResultPtr ptrGrabResult;
+    // Check that state transition is valid
+    // 1. Check that previous state was CAL_CAM
+    if (triggering_board_state_ != triggering_board_state::CAL_CAM) {
+        throw std::runtime_error("Transitioning to RUN from " + 
+            state_to_string(triggering_board_state_) + " is invalid");
+    }
+    // Perform state transition
+    triggering_board_state_ = triggering_board_state::RUN;
 
-    while (rclcpp::ok() && cameras_.IsGrabbing()) {
+    // Configure left camera (master) to use autoexposure
+    left_camera_.Open();
+    INodeMap& left_node_map = left_camera_.GetNodeMap();
+    CEnumParameter(left_node_map, "ExposureAuto").SetValue("On");
+    
+    // Set min and max exposure times
+    min_exposure_time_ = this->get_parameter("min_exposure_time").as_double();
+    max_exposure_time_ = this->get_parameter("max_exposure_time").as_double();
+    // TO-DO update to use parameters in YAML file and get rid of the two lines below!!!
+    min_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetMin();
+    max_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetMax();
+    CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").SetValue(min_exposure_time_);
+    CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").SetValue(max_exposure_time_);
 
-        try {
-            // Get image
-            cameras_.RetrieveResult(retrieve_result_timeout_, ptrGrabResult, TimeoutHandling_ThrowException);
+    // Log configuration parameters
+    RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", 
+        CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
+    RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", 
+        CEnumParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
+    RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", 
+        CEnumParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
 
-            // Convert from Pylon to OpenCV format and publish
-            convert_pylon_to_ros(ptrGrabResult);
-        }
+    // Notify
+    RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", 
+        state_to_string(triggering_board_state_).c_str());
+    
+}
 
-        // Handle Pylon Specific Errors
-        catch (const GenericException& error) {
-            RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
+void camera_driver::transition_handler_callback(const std_msgs::msg::UInt8::SharedPtr msg) {
+
+    // Update requested state to transition to
+    state_to_transition_to_ = static_cast<triggering_board_state>(msg->data);
+
+    // Transition to commanded state
+    switch(state_to_transition_to_) {
+
+        case triggering_board_state::STOP:
+            transition_to_STOP();
             break;
-        }
 
-        // Handle Custom Errors
-        catch (const std::runtime_error& error) {
-            RCLCPP_ERROR(this->get_logger(), error.what());
+        case triggering_board_state::CAL_IMU:
+            transition_to_CAL_IMU();
             break;
-        }
+
+        case triggering_board_state::CAL_CAM:
+            transition_to_CAL_CAM();
+            break;
+
+        case triggering_board_state::RUN:
+            transition_to_RUN();
+            break;
+
+        default:
+            throw std::runtime_error("Requested state transition is not valid");
 
     }
 
@@ -142,8 +256,8 @@ void camera_driver::configure_cameras() {
     CEnumParameter(left_node_map, "TriggerMode").SetValue("On");
     CEnumParameter(left_node_map, "TriggerSource").SetValue("Line2");
     CEnumParameter(left_node_map, "TriggerActivation").SetValue("RisingEdge");
-    // 2. Set exposure mode to "TriggerWidth"
-    CEnumParameter(left_node_map, "ExposureMode").SetValue("TriggerWidth");
+    // 2. Set exposure mode to "Timed" since this is the "Master" camera
+    CEnumParameter(left_node_map, "ExposureMode").SetValue("Timed");
 
     // Configure line 3 for exposure active signal:
     CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
@@ -163,8 +277,44 @@ void camera_driver::configure_cameras() {
     CEnumParameter(right_node_map, "TriggerMode").SetValue("On");
     CEnumParameter(right_node_map, "TriggerSource").SetValue("Line2");
     CEnumParameter(right_node_map, "TriggerActivation").SetValue("RisingEdge");
-    // 2. Set exposure mode to "TriggerWidth"
+    // 2. Set exposure mode to "TriggerWidth" since this is the "Slave" camera
     CEnumParameter(right_node_map, "ExposureMode").SetValue("TriggerWidth");
+
+}
+
+void camera_driver::read_images() {
+
+    // Smart pointer to receive grabed frames
+    // See https://docs.baslerweb.com/pylonapi/cpp/class_pylon_1_1_c_grab_result_data#function-gettimestamp
+    // for the pointers public functions
+    CGrabResultPtr ptrGrabResult;
+
+    while (((triggering_board_state_ == triggering_board_state::CAL_IMU) ||
+            (triggering_board_state_ == triggering_board_state::CAL_CAM) ||
+            (triggering_board_state_ == triggering_board_state::RUN)) && 
+           cameras_.IsGrabbing()) {
+
+        try {
+            // Get image
+            cameras_.RetrieveResult(retrieve_result_timeout_, ptrGrabResult, TimeoutHandling_ThrowException);
+
+            // Convert from Pylon to OpenCV format and publish
+            convert_pylon_to_ros(ptrGrabResult);
+        }
+
+        // Handle Pylon Specific Errors
+        catch (const GenericException& error) {
+            RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
+            break;
+        }
+
+        // Handle Custom Errors
+        catch (const std::runtime_error& error) {
+            RCLCPP_ERROR(this->get_logger(), error.what());
+            break;
+        }
+
+    }
 
 }
 
@@ -220,6 +370,29 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
     }
     else {
         throw std::runtime_error("Camera index " + std::to_string(camera_index) + " does not match 0 or 1");
+    }
+
+}
+
+std::string camera_driver::state_to_string(triggering_board_state state) {
+
+    switch (state) {
+
+        case triggering_board_state::STOP:
+            return "STOP";
+
+        case triggering_board_state::CAL_IMU:
+            return "CAL_IMU";
+
+        case triggering_board_state::CAL_CAM:
+            return "CAL_CAM";
+
+        case triggering_board_state::RUN:
+            return "RUN";
+
+        default:
+            throw std::runtime_error("Requested state_to_string conversion is not valid");
+
     }
 
 }

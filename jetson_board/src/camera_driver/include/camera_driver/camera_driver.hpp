@@ -14,6 +14,7 @@
 
 // Include ROS2 libraries
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/u_int8.hpp"
 
 // Macros
 #define left_camera_ cameras_[0]
@@ -22,6 +23,14 @@
 // Include namespaces
 using namespace Pylon;
 using namespace GenApi; // From the GenICam standard
+
+// Triggering board state
+enum class triggering_board_state : uint8_t {
+    STOP = 0,       // Triggering board not active
+    CAL_IMU = 1,    // IMU calibration mode
+    CAL_CAM = 2,    // Camera calibration mode
+    RUN = 3         // Nominal mode
+};
 
 // Driver to connect camera to Jetson over GMSL adpater board
 class camera_driver : public rclcpp::Node {
@@ -50,14 +59,34 @@ class camera_driver : public rclcpp::Node {
         // Thread to read images
         std::thread image_reader_thread_;
 
-        // Publisher
+        // Triggering board state and requested state to transition to
+        triggering_board_state triggering_board_state_;
+        triggering_board_state state_to_transition_to_;
+
+        // Constant exposure time
+        double constant_exposure_time_ = 3500.0; // [us]
+
+        // Autoexposure min and max exposure times
+        double min_exposure_time_; // [us] User defined in YAML file
+        double max_exposure_time_; // [us] User defined in YAML file
+
+        // Publishers and subscriber
         rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr left_image_publisher_;
         rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr right_image_publisher_;
+        rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr state_subscriber_;
 
-        // Methods
+        // Methods: state transitions
+        void transition_to_STOP();
+        void transition_to_CAL_IMU();
+        void transition_to_CAL_CAM();
+        void transition_to_RUN();
+
+        // Methods: miscellaneous
+        void transition_handler_callback(const std_msgs::msg::UInt8::SharedPtr msg);
         void configure_cameras();
         void read_images();
         void convert_pylon_to_ros(const CGrabResultPtr& image_ptr);
+        std::string state_to_string(triggering_board_state state);
 
 };
 

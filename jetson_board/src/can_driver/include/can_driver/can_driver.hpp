@@ -35,9 +35,6 @@
 // CAN message specifying that CAL_IMU phase is complete
 #define FINISHED_CAN_MSG         0xFF
 
-// Resolution of IMU clock
-#define IMU_CLOCK_RESOLUTION       1 // [us/LSB]
-
 // Triggering board state
 enum class triggering_board_state : uint8_t {
     STOP = 0,       // Triggering board not active
