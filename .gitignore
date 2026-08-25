@@ -2,6 +2,7 @@
 jetson_board/build/*
 jetson_board/log/*
 jetson_board/install/*
+jetson_board/rosbags/*
 
 #settings
 .settings/

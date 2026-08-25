@@ -32,8 +32,11 @@
 #define CAL_CAM_FRAME_LENGTH        5 // state (1 byte) + camera_calibration_rate_ (4 bytes)
 #define RUN_FRAME_LENGTH            5 // state (1 byte) + camera_rate_ (4 bytes)
 
-// Can message specifying that CAL_IMU phase is complete
+// CAN message specifying that CAL_IMU phase is complete
 #define FINISHED_CAN_MSG         0xFF
+
+// Resolution of IMU clock
+#define IMU_CLOCK_RESOLUTION       25 // [us/LSB]
 
 // Triggering board state
 enum class triggering_board_state : uint8_t {

@@ -397,7 +397,7 @@ void can_driver::read_timestamps_can_msg() {
     // Pass CAN bus frame to ROS2 message
     std::memcpy(&imu_timestamp_, &frame_.data[0], sizeof(uint32_t));
     std::memcpy(&mcu_timestamp_, &frame_.data[4], sizeof(uint32_t));
-    calibration_timestamps_msg_.imu_timestamp = imu_timestamp_;
+    calibration_timestamps_msg_.imu_timestamp = imu_timestamp_ * IMU_CLOCK_RESOLUTION;
     calibration_timestamps_msg_.mcu_timestamp = mcu_timestamp_;
 
     // Publish timestamps
