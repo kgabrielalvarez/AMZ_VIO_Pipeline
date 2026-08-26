@@ -11,6 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(pylon REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(orchestrator REQUIRED)
 
 # include opencv directories
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -21,7 +22,8 @@ add_executable(${PROJECT_NAME} src/${PROJECT_NAME}.cpp)
 # add dependencies
 ament_target_dependencies(${PROJECT_NAME} 
                           rclcpp
-                          cv_bridge)
+                          cv_bridge
+                          orchestrator)
 
 # expose header file to cpp file
 target_include_directories(${PROJECT_NAME} 
@@ -33,6 +35,10 @@ target_include_directories(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
                       pylon::pylon
                       ${OpenCV_LIBS})
+
+target_link_libraries(${PROJECT_NAME}
+                      orchestrator::orchestrator_utils
+)
 
 # Expose executable for ROS2 to find
 install(TARGETS

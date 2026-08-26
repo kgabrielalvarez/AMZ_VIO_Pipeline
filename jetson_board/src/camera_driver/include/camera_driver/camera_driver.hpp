@@ -15,22 +15,16 @@
 // Include ROS2 libraries
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/u_int8.hpp"
+#include "orchestrator/orchestrator_utils.hpp"
 
 // Macros
+// Cameras
 #define left_camera_ cameras_[0]
 #define right_camera_ cameras_[1]
 
 // Include namespaces
 using namespace Pylon;
 using namespace GenApi; // From the GenICam standard
-
-// Triggering board state
-enum class triggering_board_state : uint8_t {
-    STOP = 0,       // Triggering board not active
-    CAL_IMU = 1,    // IMU calibration mode
-    CAL_CAM = 2,    // Camera calibration mode
-    RUN = 3         // Nominal mode
-};
 
 // Driver to connect camera to Jetson over GMSL adpater board
 class camera_driver : public rclcpp::Node {
@@ -86,7 +80,6 @@ class camera_driver : public rclcpp::Node {
         void configure_cameras();
         void read_images();
         void convert_pylon_to_ros(const CGrabResultPtr& image_ptr);
-        std::string state_to_string(triggering_board_state state);
 
 };
 

@@ -15,4 +15,4 @@ sudo ip link set can0 type can bitrate 500000 dbitrate 500000 berr-reporting on 
 sudo ip link set can0 up
 
 # Start Nodes
-ros2 launch orchestrator AMZ_VIO_Pipeline.launch.py
+ros2 launch bringup AMZ_VIO_Pipeline.launch.py

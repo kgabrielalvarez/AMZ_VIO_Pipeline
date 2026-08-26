@@ -9,6 +9,7 @@
 #include "linux/can/raw.h"
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <thread>
 
 // Include ROS2 libraries
 #include "rclcpp/rclcpp.hpp"
@@ -16,9 +17,9 @@
 #include "builtin_interfaces/msg/time.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "amz_vio_pipeline_msgs/msg/calibration_timestamps.hpp"
-#include <thread>
-#include <chrono>
+#include "orchestrator/orchestrator_utils.hpp"
 
+// Macros
 // CAN message IDs
 #define STATE_CAN_ID            0x001 // Highest priority
 #define TIMESTAMPS_CAN_ID       0x002
@@ -35,13 +36,8 @@
 // CAN message specifying that CAL_IMU phase is complete
 #define FINISHED_CAN_MSG         0xFF
 
-// Triggering board state
-enum class triggering_board_state : uint8_t {
-    STOP = 0,       // Triggering board not active
-    CAL_IMU = 1,    // IMU calibration mode
-    CAL_CAM = 2,    // Camera calibration mode
-    RUN = 3         // Nominal mode
-};
+// Delay between state transitions (use to give triggering board time to transition between states)
+#define STATE_SWITCH_DELAY       1000 // [ms]
 
 // Type for converting uint8_t to float
 union bytes_to_float_t {
@@ -116,7 +112,7 @@ class can_driver : public rclcpp::Node {
         int32_t camera_rate_; // [FPS] User defined in YAML file
         int32_t camera_calibration_rate_ = 10; // [FPS]
         int32_t imu_rate_; // [Hz] User defined in YAML file
-        int32_t imu_calibration_timestamps_ = 20*60*208; // [s]
+        int32_t imu_calibration_timestamps_ = 5*208; // [s]
 
         // Camera and IMU rate bounds
         int32_t camera_rate_max_ = 168; // [FPS] max frame rate that the camera can achieve: https://www.baslerweb.com/en/shop/a2a1920-168mgc/
@@ -151,7 +147,6 @@ class can_driver : public rclcpp::Node {
         void read_timestamps_can_msg();
         void read_cam_can_msg();
         void read_imu_can_msg();
-        std::string state_to_string(triggering_board_state state);
 
 };
 

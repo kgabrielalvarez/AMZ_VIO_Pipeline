@@ -60,9 +60,28 @@ void camera_driver::transition_to_CAL_IMU() {
     // Perform state transition
     triggering_board_state_ = triggering_board_state::CAL_IMU;
 
+    // Do nothing in this state
+
+    // Notify
+    RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", state_to_string(triggering_board_state_).c_str());
+
+}
+
+void camera_driver::transition_to_CAL_CAM() {
+
+    // Check that state transition is valid
+    // 1. Check that previous state was CAL_IMU
+    if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
+        throw std::runtime_error("Transitioning to CAL_CAM from " + 
+            state_to_string(triggering_board_state_) + " is invalid");
+    }
+    // Perform state transition
+    triggering_board_state_ = triggering_board_state::CAL_CAM;
+
     // Initialize Pylon runtime
     PylonInitialize();
 
+    // Configure cameras
     try {
         // Set up cameras
         configure_cameras();
@@ -88,6 +107,16 @@ void camera_driver::transition_to_CAL_IMU() {
         RCLCPP_INFO(this->get_logger(), "Right camera TriggerActivation: %s", CEnumParameter(right_camera_map, "TriggerActivation").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Right camera ExposureMode: %s", CEnumParameter(right_camera_map, "ExposureMode").GetValue().c_str());
 
+        // Configure left camera (master) to use constant exposure
+        CEnumParameter(left_node_map, "ExposureAuto").SetValue("Off");
+        CEnumParameter(left_node_map, "ExposureTimeMode").SetValue("Common");
+        CFloatParameter(left_node_map, "ExposureTime").SetValue(constant_exposure_time_);
+
+        // Log exposure configuration parameters
+        RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeMode: %s", CEnumParameter(left_node_map, "ExposureTimeMode").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera ExposureTime: %f us", CFloatParameter(left_node_map, "ExposureTime").GetValue());
+
         // Start thread to read images
         image_reader_thread_ = std::thread(&camera_driver::read_images, this);
     }
@@ -101,37 +130,6 @@ void camera_driver::transition_to_CAL_IMU() {
     catch (const std::runtime_error& error) {
         RCLCPP_ERROR(this->get_logger(), error.what());
     }
-
-    // Notify
-    RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", state_to_string(triggering_board_state_).c_str());
-
-}
-
-void camera_driver::transition_to_CAL_CAM() {
-
-    // Check that state transition is valid
-    // 1. Check that previous state was CAL_IMU
-    if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
-        throw std::runtime_error("Transitioning to CAL_CAM from " + 
-            state_to_string(triggering_board_state_) + " is invalid");
-    }
-    // Perform state transition
-    triggering_board_state_ = triggering_board_state::CAL_CAM;
-
-    // Configure left camera (master) to use constant exposure
-    left_camera_.Open();
-    INodeMap& left_node_map = left_camera_.GetNodeMap();
-    CEnumParameter(left_node_map, "ExposureAuto").SetValue("Off");
-    CEnumParameter(left_node_map, "ExposureTimeMode").SetValue("Common");
-    CFloatParameter(left_node_map, "ExposureTime").SetValue(constant_exposure_time_);
-
-    // Log configuration parameters
-    RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", 
-        CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
-    RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeMode: %s", 
-        CEnumParameter(left_node_map, "ExposureTimeMode").GetValue().c_str());
-    RCLCPP_INFO(this->get_logger(), "Left camera ExposureTime: %f us", 
-        CFloatParameter(left_node_map, "ExposureTime").GetValue());
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", 
@@ -150,27 +148,39 @@ void camera_driver::transition_to_RUN() {
     // Perform state transition
     triggering_board_state_ = triggering_board_state::RUN;
 
-    // Configure left camera (master) to use autoexposure
-    left_camera_.Open();
-    INodeMap& left_node_map = left_camera_.GetNodeMap();
-    CEnumParameter(left_node_map, "ExposureAuto").SetValue("On");
-    
-    // Set min and max exposure times
-    min_exposure_time_ = this->get_parameter("min_exposure_time").as_double();
-    max_exposure_time_ = this->get_parameter("max_exposure_time").as_double();
-    // TO-DO update to use parameters in YAML file and get rid of the two lines below!!!
-    min_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetMin();
-    max_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetMax();
-    CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").SetValue(min_exposure_time_);
-    CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").SetValue(max_exposure_time_);
+    // Configure cameras
+    try {
+        // Configure left camera (master) to use autoexposure
+        INodeMap& left_node_map = left_camera_.GetNodeMap();
+        CEnumParameter(left_node_map, "ExposureAuto").SetValue("On");
+        
+        // Set min and max exposure times
+        min_exposure_time_ = this->get_parameter("min_exposure_time").as_double();
+        max_exposure_time_ = this->get_parameter("max_exposure_time").as_double();
+        // TO-DO update to use parameters in YAML file and get rid of the two lines below!!!
+        min_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetMin();
+        max_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetMax();
+        CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").SetValue(min_exposure_time_);
+        CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").SetValue(max_exposure_time_);
 
-    // Log configuration parameters
-    RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", 
-        CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
-    RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", 
-        CEnumParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
-    RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", 
-        CEnumParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
+        // Log configuration parameters
+        RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", 
+            CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", 
+            CEnumParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
+        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", 
+            CEnumParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
+    }
+
+    // Handle Pylon Specific Errors
+    catch (const GenericException& error) {
+        RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
+    }
+
+    // Handle Custom Errors
+    catch (const std::runtime_error& error) {
+        RCLCPP_ERROR(this->get_logger(), error.what());
+    }
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", 
@@ -374,29 +384,7 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
 
 }
 
-std::string camera_driver::state_to_string(triggering_board_state state) {
-
-    switch (state) {
-
-        case triggering_board_state::STOP:
-            return "STOP";
-
-        case triggering_board_state::CAL_IMU:
-            return "CAL_IMU";
-
-        case triggering_board_state::CAL_CAM:
-            return "CAL_CAM";
-
-        case triggering_board_state::RUN:
-            return "RUN";
-
-        default:
-            throw std::runtime_error("Requested state_to_string conversion is not valid");
-
-    }
-
-}
-
+// Main: code entry point
 int main(int argc, char * argv[]) {
     rclcpp::init(argc, argv);
     rclcpp::spin(std::make_shared<camera_driver>());

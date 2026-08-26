@@ -379,7 +379,7 @@ void can_driver::read_finished_can_msg() {
     finished_msg.data = static_cast<uint8_t>(triggering_board_state::CAL_CAM);
 
     // Wait for all the timestamps CAN messages to arrive before transitioning
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    rclcpp::sleep_for(std::chrono::milliseconds(STATE_SWITCH_DELAY));
 
     // Request transition to CAM_CAL state
     state_publisher_->publish(finished_msg);
@@ -467,29 +467,7 @@ void can_driver::read_imu_can_msg() {
 
 }
 
-std::string can_driver::state_to_string(triggering_board_state state) {
-
-    switch (state) {
-
-        case triggering_board_state::STOP:
-            return "STOP";
-
-        case triggering_board_state::CAL_IMU:
-            return "CAL_IMU";
-
-        case triggering_board_state::CAL_CAM:
-            return "CAL_CAM";
-
-        case triggering_board_state::RUN:
-            return "RUN";
-
-        default:
-            throw std::runtime_error("Requested state_to_string conversion is not valid");
-
-    }
-
-}
-
+// Main: code entry point
 int main(int argc, char * argv[]) {
     rclcpp::init(argc, argv);
     rclcpp::spin(std::make_shared<can_driver>());
