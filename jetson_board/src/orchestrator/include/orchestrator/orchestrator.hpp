@@ -11,9 +11,9 @@
 
 // Macros
 // Delay between checks of number of nodes
-#define CHECK_NUM_NODES_DELAY   100 // [ms]
+#define NODE_INIT_WAIT   500 // [ms]
 // Number of nodes that should be listening to the Orchestrator
-#define NUM_NODES                 2
+#define NUM_NODES          2
 
 // Node to orchestrate the pipeline
 class orchestrator : public rclcpp::Node {

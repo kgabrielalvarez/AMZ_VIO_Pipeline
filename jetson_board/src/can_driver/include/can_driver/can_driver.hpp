@@ -37,7 +37,7 @@
 #define FINISHED_CAN_MSG         0xFF
 
 // Delay between state transitions (use to give triggering board time to transition between states)
-#define STATE_SWITCH_DELAY       1000 // [ms]
+#define STATE_SWITCH_DELAY        500 // [ms]
 
 // Type for converting uint8_t to float
 union bytes_to_float_t {

@@ -8,12 +8,9 @@ orchestrator::orchestrator() : Node("orchestrator") {
     state_subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
         10, std::bind(&orchestrator::transition_handler_callback, this, std::placeholders::_1));
 
-    // Confirm that can_driver and camera_driver nodes are listening
-    while (state_publisher_->get_subscription_count() < NUM_NODES) {
-        rclcpp::sleep_for(std::chrono::milliseconds(CHECK_NUM_NODES_DELAY));
-    }
-    RCLCPP_INFO(this->get_logger(), "Number of subscribers: %d", NUM_NODES);
-
+    // Wait for can_driver and camera_driver nodes to initialize
+    rclcpp::sleep_for(std::chrono::milliseconds(NODE_INIT_WAIT));
+    
     // Start pipeline
     transition_msg_.data = static_cast<uint8_t>(triggering_board_state::CAL_IMU);
     state_publisher_->publish(transition_msg_);
