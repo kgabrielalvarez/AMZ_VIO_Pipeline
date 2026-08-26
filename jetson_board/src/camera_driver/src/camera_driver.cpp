@@ -83,13 +83,16 @@ void camera_driver::transition_to_CAL_CAM() {
 
     // Configure cameras
     try {
-        // Set up cameras
+        // General camera configuration
         configure_cameras();
-        
+
+        // Configure master camera for fixed exposure
+        configure_fixed_exposure();
+
         // Start getting images
         cameras_.StartGrabbing();
 
-        // Log configuration parameters for left camera
+        // Log configuration parameters for left (master) camera
         INodeMap& left_node_map = left_camera_.GetNodeMap();
         RCLCPP_INFO(this->get_logger(), "Left camera TriggerSelector: %s", CEnumParameter(left_node_map, "TriggerSelector").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Left camera TriggerMode: %s", CEnumParameter(left_node_map, "TriggerMode").GetValue().c_str());
@@ -99,7 +102,7 @@ void camera_driver::transition_to_CAL_CAM() {
         CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
         RCLCPP_INFO(this->get_logger(), "Left camera line 3: %s", CEnumParameter(left_node_map, "LineSource").GetValue().c_str());
 
-        // Log configuration parameters for right camera
+        // Log configuration parameters for right (slave) camera
         INodeMap& right_camera_map = right_camera_.GetNodeMap();
         RCLCPP_INFO(this->get_logger(), "Right camera TriggerSelector: %s", CEnumParameter(right_camera_map, "TriggerSelector").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Right camera TriggerMode: %s", CEnumParameter(right_camera_map, "TriggerMode").GetValue().c_str());
@@ -107,14 +110,10 @@ void camera_driver::transition_to_CAL_CAM() {
         RCLCPP_INFO(this->get_logger(), "Right camera TriggerActivation: %s", CEnumParameter(right_camera_map, "TriggerActivation").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Right camera ExposureMode: %s", CEnumParameter(right_camera_map, "ExposureMode").GetValue().c_str());
 
-        // Configure left camera (master) to use constant exposure
-        CEnumParameter(left_node_map, "ExposureAuto").SetValue("Off");
-        CEnumParameter(left_node_map, "ExposureTimeMode").SetValue("Common");
-        CFloatParameter(left_node_map, "ExposureTime").SetValue(constant_exposure_time_);
-
         // Log exposure configuration parameters
         RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeMode: %s", CEnumParameter(left_node_map, "ExposureTimeMode").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeSelector: %s", CEnumParameter(left_node_map, "ExposureTimeSelector").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Left camera ExposureTime: %f us", CFloatParameter(left_node_map, "ExposureTime").GetValue());
 
         // Start thread to read images
@@ -155,6 +154,7 @@ void camera_driver::transition_to_RUN() {
         CEnumParameter(left_node_map, "ExposureAuto").SetValue("On");
         
         // Set min and max exposure times
+        // MOVE THIS TO configure_auto_exposure function and make sure to stop grabbing before configuring params !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         min_exposure_time_ = this->get_parameter("min_exposure_time").as_double();
         max_exposure_time_ = this->get_parameter("max_exposure_time").as_double();
         // TO-DO update to use parameters in YAML file and get rid of the two lines below!!!
@@ -289,6 +289,21 @@ void camera_driver::configure_cameras() {
     CEnumParameter(right_node_map, "TriggerActivation").SetValue("RisingEdge");
     // 2. Set exposure mode to "TriggerWidth" since this is the "Slave" camera
     CEnumParameter(right_node_map, "ExposureMode").SetValue("TriggerWidth");
+
+}
+
+void camera_driver::configure_fixed_exposure() {
+
+    // Configure left camera (master) to use constant exposure
+    INodeMap& left_node_map = left_camera_.GetNodeMap();
+    CEnumParameter(left_node_map, "ExposureAuto").SetValue("Off");
+    CEnumParameter(left_node_map, "ExposureTimeMode").SetValue("Common");
+    CEnumParameter(left_node_map, "ExposureTimeSelector").SetValue("Common");
+    CFloatParameter(left_node_map, "ExposureTime").SetValue(constant_exposure_time_);
+
+}
+
+void camera_driver::configure_auto_exposure() {
 
 }
 

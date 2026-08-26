@@ -78,6 +78,8 @@ class camera_driver : public rclcpp::Node {
         // Methods: miscellaneous
         void transition_handler_callback(const std_msgs::msg::UInt8::SharedPtr msg);
         void configure_cameras();
+        void configure_fixed_exposure();
+        void configure_auto_exposure();
         void read_images();
         void convert_pylon_to_ros(const CGrabResultPtr& image_ptr);
 
