@@ -33,6 +33,7 @@ orchestrator::orchestrator() : Node("orchestrator") {
 
     // Publish number of images to take during CAL_CAM phase
     camera_calibration_samples_ = this->get_parameter("camera_calibration_samples").as_int();
+    std::cout << "camera calibration samples = " << camera_calibration_samples_ << std::endl;
     camera_calibration_samples_msg_.data = camera_calibration_samples_;
     camera_calibration_samples_publisher_->publish(camera_calibration_samples_msg_);
 

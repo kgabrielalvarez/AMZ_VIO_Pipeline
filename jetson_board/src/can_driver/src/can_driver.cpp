@@ -374,7 +374,8 @@ void can_driver::read_finished_can_msg() {
             
             // Check that message was sent from the correct state
             if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
-                throw std::runtime_error("Finished IMU calibration message sent from outside of CAL_IMU state");
+                throw std::runtime_error("Finished IMU calibration message sent from " + 
+                    state_to_string(triggering_board_state_).c_str() + " instead of CAL_IMU state");
             }
             
             // Confirm that we received the expected number of IMU calibration timestamps
@@ -389,7 +390,7 @@ void can_driver::read_finished_can_msg() {
             // Create message to publish
             imu_calibration_finished_msg_.data = static_cast<uint8_t>(triggering_board_state::CAL_CAM);
 
-            // Wait for all the timestamps CAN messages to arrive before transitioning
+            // Wait for all the IMU calibration CAN messages to arrive before transitioning
             rclcpp::sleep_for(std::chrono::milliseconds(STATE_SWITCH_DELAY));
 
             // Request transition to CAM_CAL state
@@ -433,7 +434,8 @@ void can_driver::read_timestamps_can_msg() {
 
     // Check that message was sent from correct state
     if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
-        throw std::runtime_error("IMU calibration timestamps message sent from outside of CAL_IMU state");
+        throw std::runtime_error("IMU calibration timestamps message sent from " + 
+            state_to_string(triggering_board_state_).c_str() + " instead of CAL_IMU state");
     }
 
     // Pass CAN bus frame to ROS2 message
@@ -453,9 +455,10 @@ void can_driver::read_timestamps_can_msg() {
 void can_driver::read_cam_can_msg() {
 
     // Check that message was sent from correct state
-    if ((triggering_board_state_ != triggering_board_state::CAL_CAM) ||
+    if ((triggering_board_state_ != triggering_board_state::CAL_CAM) &&
         (triggering_board_state_ != triggering_board_state::RUN)) {
-        throw std::runtime_error("CAM CAN message sent from outside of CAL_CAM or RUN state");
+        throw std::runtime_error("CAM CAN message sent from " + 
+            state_to_string(triggering_board_state_).c_str() + " instead of CAL_CAM or RUN state");
     }
 
     // Pass CAN bus frame to ROS2 message
@@ -476,9 +479,10 @@ void can_driver::read_cam_can_msg() {
 void can_driver::read_imu_can_msg() {
 
     // Check that message was sent from correct state
-    if ((triggering_board_state_ != triggering_board_state::CAL_CAM) ||
+    if ((triggering_board_state_ != triggering_board_state::CAL_CAM) &&
         (triggering_board_state_ != triggering_board_state::RUN)) {
-        throw std::runtime_error("IMU CAN message sent from outside of CAL_CAM or RUN state");
+        throw std::runtime_error("IMU CAN message sent from " +
+            state_to_string(triggering_board_state_).c_str() " instead of CAL_CAM or RUN state");
     }
     
     // Pass CAN bus frame to ROS2 message

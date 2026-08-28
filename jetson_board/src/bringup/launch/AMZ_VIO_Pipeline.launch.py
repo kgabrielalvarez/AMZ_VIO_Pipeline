@@ -25,7 +25,9 @@ def generate_launch_description():
 
     orchestrator_node = Node(
         package = "orchestrator",
-        executable = "orchestrator"
+        executable = "orchestrator",
+        parameters = [PathJoinSubstitution([
+                      FindPackageShare('orchestrator'), 'config', 'amz_vio_pipeline.yaml'])]
     )
     ld.add_action(orchestrator_node)
 
