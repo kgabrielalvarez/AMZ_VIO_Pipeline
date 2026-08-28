@@ -8,13 +8,17 @@ can_driver::can_driver() : Node("can_driver") {
     this->declare_parameter("imu_rate", 0); // [Hz]
 
     // Initialize publishers and subscriber
-    imu_and_timestamp_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu_and_timestamps", 10);
+    imu_and_timestamp_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu_and_timestamps", PUB_SUB_BUFFER_SIZE);
     calibration_timestamps_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::CalibrationTimestamps>
-        ("calibration_timestamps", 10);
-    cam_timestamp_publisher_ = this->create_publisher<builtin_interfaces::msg::Time>("camera_timestamps", 10);
-    state_publisher_ = this->create_publisher<std_msgs::msg::UInt8>("triggering_board_state", 10);
+        ("calibration_timestamps", PUB_SUB_BUFFER_SIZE);
+    camera_timestamp_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::CameraTimestamps>("camera_timestamps", PUB_SUB_BUFFER_SIZE);
+    camera_calibration_samples_subscriber_ = this->create_subscription<std_msgs::msg::Int32>("camera_calibration_samples",
+        PUB_SUB_BUFFER_SIZE, std::bind(&can_driver::camera_calibration_samples_callback, this, std::placeholders::_1));
+    camera_calibration_finished_publisher_ = this->create_publisher<std_msgs::msg::Bool>("camera_calibration_finished", 
+        PUB_SUB_BUFFER_SIZE);
+    state_publisher_ = this->create_publisher<std_msgs::msg::UInt8>("triggering_board_state", PUB_SUB_BUFFER_SIZE);
     state_subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
-        10, std::bind(&can_driver::transition_handler_callback, this, std::placeholders::_1));
+        PUB_SUB_BUFFER_SIZE, std::bind(&can_driver::transition_handler_callback, this, std::placeholders::_1));
 
     // Assign values to stop frame
     stop_frame_.can_id = STATE_CAN_ID;
@@ -112,7 +116,7 @@ void can_driver::transition_to_CAL_IMU() {
     can_driver::configure_can_socket();
 
     // Add number of IMU calibration timestamps and IMU rate to CAN message
-    std::memcpy(&cal_imu_frame_.data[1], &imu_calibration_timestamps_, sizeof(int32_t));
+    std::memcpy(&cal_imu_frame_.data[1], &imu_calibration_samples_, sizeof(int32_t));
     std::memcpy(&cal_imu_frame_.data[5], &imu_rate_, sizeof(int32_t));
     
     // Send triggering board command to enter CAL_IMU state
@@ -124,8 +128,8 @@ void can_driver::transition_to_CAL_IMU() {
     }
 
     // Notify
-    RCLCPP_INFO(this->get_logger(), "Number of IMU calibration timestamps = %d ", 
-        imu_calibration_timestamps_);
+    RCLCPP_INFO(this->get_logger(), "Number of IMU calibration samples = %d and IMU rate = %d", 
+        imu_calibration_samples_, imu_rate_);
 
 }
 
@@ -137,11 +141,25 @@ void can_driver::transition_to_CAL_CAM() {
         throw std::runtime_error("Transitioning to CAL_CAM from " + 
             state_to_string(triggering_board_state_) + " is invalid");
     }
+    // Update camera rate
+    camera_rate_ = this->get_parameter("camera_rate").as_int();
+    // 2. Check that camera rate is within bounds
+    if (camera_rate_ < camera_rate_min_) {
+        throw std::runtime_error("Camera rate is below min camera rate");
+    }
+    if (camera_rate_ > camera_rate_max_) {
+        throw std::runtime_error("Camera rate is above max camera rate");
+    }
+    // 3. Check that number of camera calibration samples is nonzero
+    if (camera_calibration_samples_ == 0) {
+        throw std::runtime_error("Number of camera calibration samples is zero");
+    }
     // Perform state transition
     triggering_board_state_ = triggering_board_state::CAL_CAM;
 
-    // Add camera calibration rate to CAN message
-    std::memcpy(&cal_cam_frame_.data[1], &camera_calibration_rate_, sizeof(int32_t));
+    // Add camera rate and number of camera calibration samples to CAN message
+    std::memcpy(&cal_cam_frame_.data[1], &camera_calibration_samples_, sizeof(int32_t));
+    std::memcpy(&cal_cam_frame_.data[5], &camera_rate_, sizeof(int32_t));
 
     // Send triggering board command to enter CAL_CAM state
     num_bytes_write_ = write(socket_, &cal_cam_frame_, sizeof(struct canfd_frame));
@@ -152,8 +170,8 @@ void can_driver::transition_to_CAL_CAM() {
     }
 
     // Notify
-    RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", 
-        imu_rate_, camera_calibration_rate_);
+    RCLCPP_INFO(this->get_logger(), "Number of camera calibration samples = %d and camera rate = %d FPS", 
+        camera_calibration_samples_, camera_rate_);
 
 }
 
@@ -165,20 +183,8 @@ void can_driver::transition_to_RUN() {
         throw std::runtime_error("Transitioning to RUN from " + 
             state_to_string(triggering_board_state_) + " is invalid");
     }
-    // Update camera rate
-    camera_rate_ = this->get_parameter("camera_rate").as_int();
-    // 2. Check that camera rate is within bounds
-    if (camera_rate_ < camera_rate_min_) {
-        throw std::runtime_error("Camera rate is below min camera rate");
-    }
-    if (camera_rate_ > camera_rate_max_) {
-        throw std::runtime_error("Camera rate is above max camera rate");
-    }
     // Perform state transition
     triggering_board_state_ = triggering_board_state::RUN;        
-
-    // Add IMU rate and camera rate to CAN message
-    std::memcpy(&run_frame_.data[1], &camera_rate_, sizeof(int32_t));
 
     // Send triggering board command to enter RUN state
     num_bytes_write_ = write(socket_, &run_frame_, sizeof(struct canfd_frame));
@@ -187,9 +193,6 @@ void can_driver::transition_to_RUN() {
     if (num_bytes_write_ < 0) {
         perror("Error writing run_triggering_board_frame_ to CAN Bus");
     }
-
-    // Notify
-    RCLCPP_INFO(this->get_logger(), "IMU rate = %d Hz and camera rate = %d FPS", imu_rate_, camera_rate_);
 
 }
 
@@ -221,6 +224,13 @@ void can_driver::transition_handler_callback(const std_msgs::msg::UInt8::SharedP
             throw std::runtime_error("Requested state transition is not valid");
 
     }
+
+}
+
+void can_driver::camera_calibration_samples_callback(const std_msgs::msg::Int32::SharedPtr msg) {
+
+    // Update number of camera calibration samples based on value published by orchestrator
+    camera_calibration_samples_ = msg->data;
 
 }
 
@@ -353,36 +363,69 @@ void can_driver::read_state_can_msg() {
 
 void can_driver::read_finished_can_msg() {
 
-    // Check that message was sent from correct state
-    if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
-        throw std::runtime_error("Finished IMU calibration message sent from outside of CAL_IMU state");
-    }
-
-    // Confirm that message value is correct
+    // Extract message value
     uint8_t raw_message;
     std::memcpy(&raw_message, &frame_.data[0], sizeof(uint8_t));
-    if (raw_message != FINISHED_CAN_MSG) {
-        throw std::runtime_error("Finished IMU calibration message is incorrect");
+
+    // Check which finished message was received
+    switch (raw_message) {
+
+        case FINISHED_IMU_CAL_MSG:
+            
+            // Check that message was sent from the correct state
+            if (triggering_board_state_ != triggering_board_state::CAL_IMU) {
+                throw std::runtime_error("Finished IMU calibration message sent from outside of CAL_IMU state");
+            }
+            
+            // Confirm that we received the expected number of IMU calibration timestamps
+            if (imu_calibration_counter_ != imu_calibration_samples_) {
+                throw std::runtime_error(std::string("Only received ") + std::to_string(imu_calibration_counter_) +
+                    std::string(" IMU calibration timestamps, but expected ") + std::to_string(imu_calibration_samples_));
+            }
+
+            // Reset counter
+            imu_calibration_counter_ = 0;
+
+            // Create message to publish
+            imu_calibration_finished_msg_.data = static_cast<uint8_t>(triggering_board_state::CAL_CAM);
+
+            // Wait for all the timestamps CAN messages to arrive before transitioning
+            rclcpp::sleep_for(std::chrono::milliseconds(STATE_SWITCH_DELAY));
+
+            // Request transition to CAM_CAL state
+            state_publisher_->publish(imu_calibration_finished_msg_);
+
+            break;
+
+        case FINISHED_CAM_CAL_MSG:
+
+            // Check that the message was sent from the correct state
+            if (triggering_board_state_ != triggering_board_state::CAL_CAM) {
+                throw std::runtime_error("Finished camera calibration message sent from outside of CAL_CAM state");
+            }
+
+            // Confirm that we received the expected number of camera timestamps
+            if (camera_calibration_counter_ != camera_calibration_samples_) {
+                throw std::runtime_error(std::string("Only received ") + std::to_string(camera_calibration_counter_) +
+                    std::string(" camera timestamps, but expected ") + std::to_string(camera_calibration_samples_));
+            }
+
+            // Reset counter
+            camera_calibration_counter_ = 0;
+
+            // Create message to publish
+            camera_calibration_finished_msg_.data = true;
+
+            // Notify orchestrator that all camera timestamps have been received
+            camera_calibration_finished_publisher_->publish(camera_calibration_finished_msg_);
+
+            break;
+
+        default:
+
+            throw std::runtime_error("Unknown finished message received");
+
     }
-
-    // Confirm that we received the expected number of IMU calibration timestamps
-    if (calibration_timestamp_counter_ != imu_calibration_timestamps_) {
-        throw std::runtime_error(std::string("Only received ") + std::to_string(calibration_timestamp_counter_) +
-            std::string(" timestamps, but expected ") + std::to_string(imu_calibration_timestamps_));
-    }
-
-    // Reset counter
-    calibration_timestamp_counter_ = 0;
-
-    // Create message to publish
-    std_msgs::msg::UInt8 finished_msg;
-    finished_msg.data = static_cast<uint8_t>(triggering_board_state::CAL_CAM);
-
-    // Wait for all the timestamps CAN messages to arrive before transitioning
-    rclcpp::sleep_for(std::chrono::milliseconds(STATE_SWITCH_DELAY));
-
-    // Request transition to CAM_CAL state
-    state_publisher_->publish(finished_msg);
 
 }
 
@@ -403,7 +446,7 @@ void can_driver::read_timestamps_can_msg() {
     calibration_timestamps_publisher_->publish(calibration_timestamps_msg_);
 
     // Update counter
-    calibration_timestamp_counter_++;
+    imu_calibration_counter_++;
 
 }
 
@@ -417,11 +460,16 @@ void can_driver::read_cam_can_msg() {
 
     // Pass CAN bus frame to ROS2 message
     std::memcpy(&cam_timestamp_, &frame_.data[0], sizeof(uint32_t));
-    cam_msg_.sec = cam_timestamp_ / 1000;
-    cam_msg_.nanosec = (cam_timestamp_ % 1000) * 1000000;
+    std::memcpy(&cam_frame_index_, &frame_.data[4], sizeof(uint32_t));
+    cam_msg_.timestamp.sec = cam_timestamp_ / 1000;
+    cam_msg_.timestamp.nanosec = (cam_timestamp_ % 1000) * 1000000;
+    cam_msg_.index = cam_frame_index_;
 
     // Publish timestamp
-    cam_timestamp_publisher_->publish(cam_msg_);
+    camera_timestamp_publisher_->publish(cam_msg_);
+
+    // Update counter
+    camera_calibration_counter_++;
     
 }
 

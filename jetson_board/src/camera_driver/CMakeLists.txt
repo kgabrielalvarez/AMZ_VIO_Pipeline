@@ -12,6 +12,7 @@ find_package(pylon REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(orchestrator REQUIRED)
+find_package(amz_vio_pipeline_msgs REQUIRED)
 
 # include opencv directories
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -23,7 +24,8 @@ add_executable(${PROJECT_NAME} src/${PROJECT_NAME}.cpp)
 ament_target_dependencies(${PROJECT_NAME} 
                           rclcpp
                           cv_bridge
-                          orchestrator)
+                          orchestrator
+                          amz_vio_pipeline_msgs)
 
 # expose header file to cpp file
 target_include_directories(${PROJECT_NAME} 

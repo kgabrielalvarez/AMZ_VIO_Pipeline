@@ -1,3 +1,7 @@
+orchestrator:
+  ros__parameters:
+    camera_calibration_samples: 500 # at 50 FPS this is 10s of data
+
 can_driver:
   ros__parameters:
     # Acceptable IMU rates:

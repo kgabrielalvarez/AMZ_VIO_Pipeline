@@ -8,10 +8,10 @@ camera_driver::camera_driver() : Node("camera_driver") {
     this->declare_parameter("max_exposure_time", 0.0);
 
     // Initialize publishers and subscriber
-    left_image_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("left_images", 10);
-    right_image_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("right_images", 10);
+    left_image_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::ImageIndexed>("left_images", PUB_SUB_BUFFER_SIZE);
+    right_image_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::ImageIndexed>("right_images", PUB_SUB_BUFFER_SIZE);
     state_subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
-        10, std::bind(&camera_driver::transition_handler_callback, this, std::placeholders::_1));
+        PUB_SUB_BUFFER_SIZE, std::bind(&camera_driver::transition_handler_callback, this, std::placeholders::_1));
 
     // Log start of node
     RCLCPP_INFO(this->get_logger(), "camera_driver started...");
@@ -60,7 +60,7 @@ void camera_driver::transition_to_CAL_IMU() {
     // Perform state transition
     triggering_board_state_ = triggering_board_state::CAL_IMU;
 
-    // Do nothing in this state
+    // Do nothing in this state transition
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", state_to_string(triggering_board_state_).c_str());
@@ -86,9 +86,6 @@ void camera_driver::transition_to_CAL_CAM() {
         // General camera configuration
         configure_cameras();
 
-        // Configure master camera for fixed exposure
-        configure_fixed_exposure();
-
         // Start getting images
         cameras_.StartGrabbing();
 
@@ -103,18 +100,25 @@ void camera_driver::transition_to_CAL_CAM() {
         RCLCPP_INFO(this->get_logger(), "Left camera line 3: %s", CEnumParameter(left_node_map, "LineSource").GetValue().c_str());
 
         // Log configuration parameters for right (slave) camera
-        INodeMap& right_camera_map = right_camera_.GetNodeMap();
-        RCLCPP_INFO(this->get_logger(), "Right camera TriggerSelector: %s", CEnumParameter(right_camera_map, "TriggerSelector").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Right camera TriggerMode: %s", CEnumParameter(right_camera_map, "TriggerMode").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Right camera TriggerSource: %s", CEnumParameter(right_camera_map, "TriggerSource").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Right camera TriggerActivation: %s", CEnumParameter(right_camera_map, "TriggerActivation").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Right camera ExposureMode: %s", CEnumParameter(right_camera_map, "ExposureMode").GetValue().c_str());
+        INodeMap& right_node_map = right_camera_.GetNodeMap();
+        RCLCPP_INFO(this->get_logger(), "Right camera TriggerSelector: %s", CEnumParameter(right_node_map, "TriggerSelector").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera TriggerMode: %s", CEnumParameter(right_node_map, "TriggerMode").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera TriggerSource: %s", CEnumParameter(right_node_map, "TriggerSource").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera TriggerActivation: %s", CEnumParameter(right_node_map, "TriggerActivation").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera ExposureMode: %s", CEnumParameter(right_node_map, "ExposureMode").GetValue().c_str());
+        CEnumParameter(right_node_map, "LineSelector").SetValue("Line3");
+        RCLCPP_INFO(this->get_logger(), "Right camera line 3: %s", CEnumParameter(right_node_map, "LineSource").GetValue().c_str());
 
         // Log exposure configuration parameters
         RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeMode: %s", CEnumParameter(left_node_map, "ExposureTimeMode").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeSelector: %s", CEnumParameter(left_node_map, "ExposureTimeSelector").GetValue().c_str());
         RCLCPP_INFO(this->get_logger(), "Left camera ExposureTime: %f us", CFloatParameter(left_node_map, "ExposureTime").GetValue());
+
+        // Log autoexposure configuration parameters
+        RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", CEnumParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
+        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", CEnumParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
 
         // Start thread to read images
         image_reader_thread_ = std::thread(&camera_driver::read_images, this);
@@ -147,40 +151,7 @@ void camera_driver::transition_to_RUN() {
     // Perform state transition
     triggering_board_state_ = triggering_board_state::RUN;
 
-    // Configure cameras
-    try {
-        // Configure left camera (master) to use autoexposure
-        INodeMap& left_node_map = left_camera_.GetNodeMap();
-        CEnumParameter(left_node_map, "ExposureAuto").SetValue("On");
-        
-        // Set min and max exposure times
-        // MOVE THIS TO configure_auto_exposure function and make sure to stop grabbing before configuring params !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        min_exposure_time_ = this->get_parameter("min_exposure_time").as_double();
-        max_exposure_time_ = this->get_parameter("max_exposure_time").as_double();
-        // TO-DO update to use parameters in YAML file and get rid of the two lines below!!!
-        min_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetMin();
-        max_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetMax();
-        CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").SetValue(min_exposure_time_);
-        CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").SetValue(max_exposure_time_);
-
-        // Log configuration parameters
-        RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", 
-            CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", 
-            CEnumParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
-        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", 
-            CEnumParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
-    }
-
-    // Handle Pylon Specific Errors
-    catch (const GenericException& error) {
-        RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
-    }
-
-    // Handle Custom Errors
-    catch (const std::runtime_error& error) {
-        RCLCPP_ERROR(this->get_logger(), error.what());
-    }
+    // Do nothing in this state transition
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", 
@@ -280,6 +251,8 @@ void camera_driver::configure_cameras() {
     // Configure input line
     CEnumParameter(right_node_map, "LineSelector").SetValue("Line2");
     CEnumParameter(right_node_map, "LineMode").SetValue("Input");
+    CEnumParameter(right_node_map, "LineSelector").SetValue("Line3");
+    CEnumParameter(right_node_map, "LineMode").SetValue("Output");
 
     // Configure line 2 for hardware triggering:
     // 1. Set trigger to initiate frame start
@@ -290,20 +263,18 @@ void camera_driver::configure_cameras() {
     // 2. Set exposure mode to "TriggerWidth" since this is the "Slave" camera
     CEnumParameter(right_node_map, "ExposureMode").SetValue("TriggerWidth");
 
-}
+    // Configure line 3 for exposure active signal:
+    CEnumParameter(right_node_map, "LineSelector").SetValue("Line3");
+    CEnumParameter(right_node_map, "LineSource").SetValue("ExposureActive");
 
-void camera_driver::configure_fixed_exposure() {
-
-    // Configure left camera (master) to use constant exposure
-    INodeMap& left_node_map = left_camera_.GetNodeMap();
-    CEnumParameter(left_node_map, "ExposureAuto").SetValue("Off");
-    CEnumParameter(left_node_map, "ExposureTimeMode").SetValue("Common");
-    CEnumParameter(left_node_map, "ExposureTimeSelector").SetValue("Common");
-    CFloatParameter(left_node_map, "ExposureTime").SetValue(constant_exposure_time_);
-
-}
-
-void camera_driver::configure_auto_exposure() {
+    // Configure autoexposure
+    min_exposure_time_ = this->get_parameter("min_exposure_time").as_double();
+    max_exposure_time_ = this->get_parameter("max_exposure_time").as_double();
+    // TO-DO update to use parameters in YAML file and get rid of the two lines below!!!
+    min_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetMin();
+    max_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetMax();
+    CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").SetValue(min_exposure_time_);
+    CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").SetValue(max_exposure_time_);
 
 }
 
@@ -385,16 +356,46 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
                              bytes_per_row);
 
     // Publish OpenCV image
-    if (camera_index == 0) {
-        left_image_publisher_->publish(*cv_image.toImageMsg());
-        RCLCPP_INFO(this->get_logger(), "Published left image");
-    }
-    else if (camera_index == 1) {
-        right_image_publisher_->publish(*cv_image.toImageMsg());
-        RCLCPP_INFO(this->get_logger(), "Published right image");
-    }
-    else {
-        throw std::runtime_error("Camera index " + std::to_string(camera_index) + " does not match 0 or 1");
+    switch (camera_index) {
+        
+        case 0:
+
+            // Update index
+            left_image_index_++;
+            
+            // Create message
+            left_image_message_.image = *cv_image.toImageMsg();
+            left_image_message_.index = left_image_index_;
+            
+            // Publish message
+            left_image_publisher_->publish(left_image_message_);
+
+            // Notify
+            RCLCPP_INFO(this->get_logger(), "Published left image");
+
+            break;
+
+        case 1:
+
+            // Update index
+            right_image_index_++;
+
+            // Create message
+            right_image_message_.image = *cv_image.toImageMsg();
+            right_image_message_.index = right_image_index_;
+
+            // Publish message
+            right_image_publisher_->publish(right_image_message_);
+
+            // Notify
+            RCLCPP_INFO(this->get_logger(), "Published right image");
+
+            break;
+
+        default:
+        
+            throw std::runtime_error("Camera index " + std::to_string(camera_index) + " does not match 0 or 1");
+
     }
 
 }

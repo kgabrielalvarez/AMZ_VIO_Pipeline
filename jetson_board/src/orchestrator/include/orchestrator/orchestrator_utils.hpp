@@ -2,6 +2,9 @@
 #include <string>
 #include <stdexcept>
 
+// Macros
+#define PUB_SUB_BUFFER_SIZE     10
+
 // Triggering board state
 enum class triggering_board_state : uint8_t {
     STOP = 0,       // Triggering board not active

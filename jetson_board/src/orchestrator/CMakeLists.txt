@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(amz_vio_pipeline_msgs REQUIRED)
 
 # executable
 add_executable(orchestrator src/orchestrator.cpp)
@@ -21,7 +22,8 @@ add_library(orchestrator_utils
 # add dependencies
 ament_target_dependencies(${PROJECT_NAME}
                           rclcpp
-                          std_msgs)
+                          std_msgs
+                          amz_vio_pipeline_msgs)
 
 # expose header file to cpp file
 target_include_directories(orchestrator_utils

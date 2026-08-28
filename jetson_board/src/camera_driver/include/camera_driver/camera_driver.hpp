@@ -16,6 +16,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/u_int8.hpp"
 #include "orchestrator/orchestrator_utils.hpp"
+#include "amz_vio_pipeline_msgs/msg/image_indexed.hpp"
 
 // Macros
 // Cameras
@@ -57,17 +58,25 @@ class camera_driver : public rclcpp::Node {
         triggering_board_state triggering_board_state_;
         triggering_board_state state_to_transition_to_;
 
-        // Constant exposure time
-        double constant_exposure_time_ = 3500.0; // [us]
-
         // Autoexposure min and max exposure times
         double min_exposure_time_; // [us] User defined in YAML file
         double max_exposure_time_; // [us] User defined in YAML file
 
+        // Image indices
+        uint32_t left_image_index_;
+        uint32_t right_image_index_;
+
+        // Image messages
+        amz_vio_pipeline_msgs::msg::ImageIndexed left_image_message_;
+        amz_vio_pipeline_msgs::msg::ImageIndexed right_image_message_;
+
         // Publishers and subscriber
-        rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr left_image_publisher_;
-        rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr right_image_publisher_;
+        rclcpp::Publisher<amz_vio_pipeline_msgs::msg::ImageIndexed>::SharedPtr left_image_publisher_;
+        rclcpp::Publisher<amz_vio_pipeline_msgs::msg::ImageIndexed>::SharedPtr right_image_publisher_;
         rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr state_subscriber_;
+
+        // Callbacks
+        void transition_handler_callback(const std_msgs::msg::UInt8::SharedPtr msg);
 
         // Methods: state transitions
         void transition_to_STOP();
@@ -76,10 +85,7 @@ class camera_driver : public rclcpp::Node {
         void transition_to_RUN();
 
         // Methods: miscellaneous
-        void transition_handler_callback(const std_msgs::msg::UInt8::SharedPtr msg);
         void configure_cameras();
-        void configure_fixed_exposure();
-        void configure_auto_exposure();
         void read_images();
         void convert_pylon_to_ros(const CGrabResultPtr& image_ptr);
 
