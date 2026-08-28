@@ -111,14 +111,8 @@ void camera_driver::transition_to_CAL_CAM() {
 
         // Log exposure configuration parameters
         RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeMode: %s", CEnumParameter(left_node_map, "ExposureTimeMode").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera ExposureTimeSelector: %s", CEnumParameter(left_node_map, "ExposureTimeSelector").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera ExposureTime: %f us", CFloatParameter(left_node_map, "ExposureTime").GetValue());
-
-        // Log autoexposure configuration parameters
-        RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", CEnumParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
-        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", CEnumParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
+        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
+        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
 
         // Start thread to read images
         image_reader_thread_ = std::thread(&camera_driver::read_images, this);
@@ -268,11 +262,9 @@ void camera_driver::configure_cameras() {
     CEnumParameter(right_node_map, "LineSource").SetValue("ExposureActive");
 
     // Configure autoexposure
+    CEnumParameter(left_node_map, "ExposureAuto").SetValue("Continuous");
     min_exposure_time_ = this->get_parameter("min_exposure_time").as_double();
     max_exposure_time_ = this->get_parameter("max_exposure_time").as_double();
-    // TO-DO update to use parameters in YAML file and get rid of the two lines below!!!
-    min_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetMin();
-    max_exposure_time_ = CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetMax();
     CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").SetValue(min_exposure_time_);
     CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").SetValue(max_exposure_time_);
 
