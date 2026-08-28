@@ -10,7 +10,7 @@
 #define STATE_SWITCH_DELAY 		500 // [ms]
 
 // Duration of trigger pulse
-#define TRIGGER_PULSE		   5000 // [us]
+#define TRIGGER_PULSE		    100 // [us]
 
 // Conversion from s to us
 #define S_TO_US		  pow(10.0, 6.0)
