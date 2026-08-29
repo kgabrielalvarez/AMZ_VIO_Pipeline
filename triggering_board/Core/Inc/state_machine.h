@@ -7,13 +7,17 @@
 
 /* Macros --------------------------------------------------------------------*/
 // Delay between state transitions (used to give ROS2 nodes time to transition between states)
-#define STATE_SWITCH_DELAY 		500 // [ms]
+#define STATE_SWITCH_DELAY 	   1000 // [ms]
 
 // Duration of trigger pulse
 #define TRIGGER_PULSE		    100 // [us]
 
 // Conversion from s to us
-#define S_TO_US		  pow(10.0, 6.0)
+#define S_TO_US		 pow(10.0, 6.0)
+
+// Camera ID
+#define CAM_1_ID			   0x01
+#define CAM_2_ID			   0x02
 
 /* Declare custom types ------------------------------------------------------*/
 // Triggering board states
@@ -35,7 +39,8 @@ typedef enum {
 	TRANSITION_TO_CAL_IMU_IS_INVALID,
 	TRANSITION_TO_CAL_CAM_IS_INVALID,
 	TRANSITION_TO_RUN_IS_INVALID,
-	EXP_ACT_PIN_IN_UNKNOWN_STATE,
+	EXP_ACT_1_PIN_IN_UNKNOWN_STATE,
+	EXP_ACT_2_PIN_IN_UNKNOWN_STATE,
 
 	// CAN
 	FDCAN_CONFIG_FILTER_FAILED,
@@ -47,7 +52,8 @@ typedef enum {
 	FAILED_TO_SEND_CAN_STATE_MESSAGE,
 	FAILED_TO_SEND_CAN_TIMESTAMPS_MESSAGE,
 	FAILED_TO_SEND_CAN_FINISHED_MESSAGE,
-	FAILED_TO_SEND_CAN_CAM_MESSAGE,
+	FAILED_TO_SEND_CAN_CAM_MESSAGE_1,
+	FAILED_TO_SEND_CAN_CAM_MESSAGE_2,
 
 	// IMU
 	DEN_MEASUREMENTS_NOT_STAMPED,
@@ -58,7 +64,8 @@ typedef enum {
 	INPUT_CAPTURE_TRIGGERED_ON_UNKNOWN_CHANNEL,
 	OUTPUT_CAPTURE_TRIGGERED_ON_UNKOWN_CHANNEL,
 	TRIGGER_PIN_IN_UNKOWN_STATE,
-	EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE
+	EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_1,
+	EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_2
 
 } error_code_t;
 

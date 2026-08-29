@@ -6,17 +6,18 @@
 
 /* Macros --------------------------------------------------------------------*/
 // IDs of CAN messages
-#define STATE_CAN_ID 		0x001 // Highest priority
-#define TIMESTAMPS_CAN_ID	0x002
-#define FINISHED_CAN_ID		0x003
-#define CAM_CAN_ID			0x004
-#define IMU_CAN_ID			0x005 // Lowest priority
+#define STATE_CAN_ID 			0x001 // Highest priority
+#define TIMESTAMPS_CAN_ID		0x002
+#define FINISHED_CAN_ID			0x003
+#define CAM_CAN_ID				0x004
+#define IMU_CAN_ID				0x005 // Lowest priority
 
 // Buffer size
-#define BUFFER_SIZE			   32 // [bytes]
+#define BUFFER_SIZE			   	   32 // [bytes]
 
 // CAN message specifying that CAL_IMU phase is complete
-#define FINISHED_CAN_MSG     0xFF
+#define FINISHED_IMU_CAL_MSG 	 0xFF
+#define FINISHED_CAM_CAL_MSG 	 0x11
 
 /* Declare global variables --------------------------------------------------*/
 // FDCAN controller 2

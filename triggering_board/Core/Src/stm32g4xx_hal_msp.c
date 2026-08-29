@@ -324,15 +324,16 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base)
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     /**TIM2 GPIO Configuration
+    PA1     ------> TIM2_CH2
     PA2     ------> TIM2_CH3
     PB11     ------> TIM2_CH4
     */
-    GPIO_InitStruct.Pin = EXP_ACT_Pin;
+    GPIO_InitStruct.Pin = EXP_ACT_1_Pin|EXP_ACT_2_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
-    HAL_GPIO_Init(EXP_ACT_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
     GPIO_InitStruct.Pin = IMU_INT1_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -395,11 +396,12 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* htim_base)
     __HAL_RCC_TIM2_CLK_DISABLE();
 
     /**TIM2 GPIO Configuration
+    PA1     ------> TIM2_CH2
     PA2     ------> TIM2_CH3
     PA5     ------> TIM2_CH1
     PB11     ------> TIM2_CH4
     */
-    HAL_GPIO_DeInit(GPIOA, EXP_ACT_Pin|TRIGGER_Pin);
+    HAL_GPIO_DeInit(GPIOA, EXP_ACT_1_Pin|EXP_ACT_2_Pin|TRIGGER_Pin);
 
     HAL_GPIO_DeInit(IMU_INT1_GPIO_Port, IMU_INT1_Pin);
 
