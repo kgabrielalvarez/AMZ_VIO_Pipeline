@@ -3,7 +3,11 @@
 #include <stdexcept>
 
 // Macros
+// Publisher and subscriber buffer size
 #define PUB_SUB_BUFFER_SIZE     10
+// Camera IDs
+#define LEFT_CAM_ID           0x01
+#define RIGHT_CAM_ID          0x02
 
 // Triggering board state
 enum class triggering_board_state : uint8_t {

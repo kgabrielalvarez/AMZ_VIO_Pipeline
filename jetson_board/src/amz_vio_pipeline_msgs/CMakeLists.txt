@@ -14,6 +14,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CalibrationTimestamps.msg"
   "msg/CameraTimestamps.msg"
   "msg/ImageIndexed.msg"
+  "msg/CameraCalibrationFinished.msg"
   DEPENDENCIES sensor_msgs
 )
 

@@ -1,0 +1,3 @@
+bool finished
+uint32 total_left_calibration_samples
+uint32 total_right_calibration_samples

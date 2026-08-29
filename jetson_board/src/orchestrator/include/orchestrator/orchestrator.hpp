@@ -9,6 +9,7 @@
 #include "orchestrator/orchestrator_utils.hpp"
 #include "amz_vio_pipeline_msgs/msg/camera_timestamps.hpp"
 #include "amz_vio_pipeline_msgs/msg/image_indexed.hpp"
+#include "amz_vio_pipeline_msgs/msg/camera_calibration_finished.hpp"
 
 // Include miscellaneous libraries
 #include <chrono>
@@ -48,16 +49,21 @@ class orchestrator : public rclcpp::Node {
         std_msgs::msg::Int32 camera_calibration_samples_msg_;
 
         // Camera calibration finished flag
-        bool camera_calibration_finished_ = false;
+        bool camera_calibration_finished_;
 
         // Indexes to keep track of images and timestamps
         uint32_t left_image_index_ = 0;
         uint32_t right_image_index_ = 0;
-        uint32_t camera_timestamp_index_ = 0;
+        uint32_t left_camera_timestamp_index_ = 0;
+        uint32_t right_camera_timestamp_index_ = 0;
+
+        // Total number of calibration samples
+        uint32_t total_left_calibration_samples_;
+        uint32_t total_right_calibration_samples_;
 
         // Publishers and subscribers
         rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr camera_calibration_samples_publisher_;
-        rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr camera_calibration_finished_subscriber_;
+        rclcpp::Subscription<amz_vio_pipeline_msgs::msg::CameraCalibrationFinished>::SharedPtr camera_calibration_finished_subscriber_;
         rclcpp::Subscription<amz_vio_pipeline_msgs::msg::ImageIndexed>::SharedPtr left_image_subscriber_;
         rclcpp::Subscription<amz_vio_pipeline_msgs::msg::ImageIndexed>::SharedPtr right_image_subscriber_;
         rclcpp::Subscription<amz_vio_pipeline_msgs::msg::CameraTimestamps>::SharedPtr camera_timestamp_subscriber_;
@@ -69,7 +75,7 @@ class orchestrator : public rclcpp::Node {
 
         // Callbacks
         void transition_handler_callback(const std_msgs::msg::UInt8::SharedPtr msg);
-        void camera_calibration_finished_callback(const std_msgs::msg::Bool::SharedPtr msg);
+        void camera_calibration_finished_callback(const amz_vio_pipeline_msgs::msg::CameraCalibrationFinished::SharedPtr msg);
         void left_images_callback(const amz_vio_pipeline_msgs::msg::ImageIndexed::SharedPtr msg);
         void right_images_callback(const amz_vio_pipeline_msgs::msg::ImageIndexed::SharedPtr msg);
         void camera_timestamp_callback(const amz_vio_pipeline_msgs::msg::CameraTimestamps::SharedPtr msg);

@@ -20,6 +20,7 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "amz_vio_pipeline_msgs/msg/calibration_timestamps.hpp"
 #include "amz_vio_pipeline_msgs/msg/camera_timestamps.hpp"
+#include "amz_vio_pipeline_msgs/msg/camera_calibration_finished.hpp"
 #include "orchestrator/orchestrator_utils.hpp"
 
 // Macros
@@ -96,6 +97,7 @@ class can_driver : public rclcpp::Node {
         // Variables to publish in camera_timestamp msg
         uint32_t cam_timestamp_;
         uint32_t cam_frame_index_;
+        uint8_t cam_index_;
 
         // Unit conversion factors
         float mg_to_ms2_ = 9.81/1000.0;
@@ -106,7 +108,7 @@ class can_driver : public rclcpp::Node {
         amz_vio_pipeline_msgs::msg::CameraTimestamps cam_msg_;
         sensor_msgs::msg::Imu imu_msg_;
         std_msgs::msg::UInt8 imu_calibration_finished_msg_;
-        std_msgs::msg::Bool camera_calibration_finished_msg_;
+        amz_vio_pipeline_msgs::msg::CameraCalibrationFinished camera_calibration_finished_msg_;
 
         // Write to CAN Bus
         ssize_t num_bytes_write_;
@@ -129,7 +131,8 @@ class can_driver : public rclcpp::Node {
         int32_t imu_calibration_counter_ = 0;
 
         // Counter to keep track of the number of camera frames that have been received
-        int32_t camera_calibration_counter_ = 0;
+        int32_t camera_left_calibration_counter_ = 0;
+        int32_t camera_right_calibration_counter_ = 0;
 
         // Triggering board state and requested state to transition to
         triggering_board_state triggering_board_state_;
@@ -140,7 +143,7 @@ class can_driver : public rclcpp::Node {
         rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CalibrationTimestamps>::SharedPtr calibration_timestamps_publisher_;
         rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CameraTimestamps>::SharedPtr camera_timestamp_publisher_;
         rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr camera_calibration_samples_subscriber_;
-        rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr camera_calibration_finished_publisher_;
+        rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CameraCalibrationFinished>::SharedPtr camera_calibration_finished_publisher_;
         rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr state_publisher_;
         rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr state_subscriber_;
 

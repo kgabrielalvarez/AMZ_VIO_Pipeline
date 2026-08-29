@@ -292,6 +292,8 @@ void camera_driver::read_images() {
 
         // Handle Pylon Specific Errors
         catch (const GenericException& error) {
+            RCLCPP_INFO(this->get_logger(), "Left images count = %d", left_image_index_);
+            RCLCPP_INFO(this->get_logger(), "Right images count = %d", right_image_index_);
             RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
             break;
         }

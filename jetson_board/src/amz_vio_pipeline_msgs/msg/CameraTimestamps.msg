@@ -1,2 +1,3 @@
 builtin_interfaces/Time timestamp
-uint32 index
+uint32 frame_index
+uint8 camera_index

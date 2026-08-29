@@ -14,8 +14,8 @@ can_driver::can_driver() : Node("can_driver") {
     camera_timestamp_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::CameraTimestamps>("camera_timestamps", PUB_SUB_BUFFER_SIZE);
     camera_calibration_samples_subscriber_ = this->create_subscription<std_msgs::msg::Int32>("camera_calibration_samples",
         PUB_SUB_BUFFER_SIZE, std::bind(&can_driver::camera_calibration_samples_callback, this, std::placeholders::_1));
-    camera_calibration_finished_publisher_ = this->create_publisher<std_msgs::msg::Bool>("camera_calibration_finished", 
-        PUB_SUB_BUFFER_SIZE);
+    camera_calibration_finished_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::CameraCalibrationFinished>
+        ("camera_calibration_finished", PUB_SUB_BUFFER_SIZE);
     state_publisher_ = this->create_publisher<std_msgs::msg::UInt8>("triggering_board_state", PUB_SUB_BUFFER_SIZE);
     state_subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
         PUB_SUB_BUFFER_SIZE, std::bind(&can_driver::transition_handler_callback, this, std::placeholders::_1));
@@ -405,20 +405,27 @@ void can_driver::read_finished_can_msg() {
                 throw std::runtime_error("Finished camera calibration message sent from outside of CAL_CAM state");
             }
 
-            // Confirm that we received the expected number of camera timestamps
-            if (camera_calibration_counter_ != camera_calibration_samples_) {
-                throw std::runtime_error(std::string("Only received ") + std::to_string(camera_calibration_counter_) +
-                    std::string(" camera timestamps, but expected ") + std::to_string(camera_calibration_samples_));
-            }
-
-            // Reset counter
-            camera_calibration_counter_ = 0;
+            // Get number of calibration samples
+            uint32_t total_left_calibration_samples;
+            uint32_t total_right_calibration_samples;
+            std::memcpy(&total_left_calibration_samples, &frame_.data[1], sizeof(uint32_t));
+            std::memcpy(&total_right_calibration_samples, &frame_.data[5], sizeof(uint32_t));
 
             // Create message to publish
-            camera_calibration_finished_msg_.data = true;
+            camera_calibration_finished_msg_.finished = true;
+            camera_calibration_finished_msg_.total_left_calibration_samples = total_left_calibration_samples;
+            camera_calibration_finished_msg_.total_right_calibration_samples = total_left_calibration_samples;
 
             // Notify orchestrator that all camera timestamps have been received
             camera_calibration_finished_publisher_->publish(camera_calibration_finished_msg_);
+
+            // Log the total number of camera calibration samples that were received
+            RCLCPP_INFO(this->get_logger(), "Received %d left camera calibration samples", camera_left_calibration_counter_);
+            RCLCPP_INFO(this->get_logger(), "Received %d right camera calibration samples", camera_right_calibration_counter_);
+
+            // Reset counter
+            camera_left_calibration_counter_ = 0;
+            camera_right_calibration_counter_ = 0;
 
             break;
 
@@ -464,15 +471,24 @@ void can_driver::read_cam_can_msg() {
     // Pass CAN bus frame to ROS2 message
     std::memcpy(&cam_timestamp_, &frame_.data[0], sizeof(uint32_t));
     std::memcpy(&cam_frame_index_, &frame_.data[4], sizeof(uint32_t));
+    std::memcpy(&cam_index_, &frame_.data[8], sizeof(uint8_t));
     cam_msg_.timestamp.sec = cam_timestamp_ / 1000;
     cam_msg_.timestamp.nanosec = (cam_timestamp_ % 1000) * 1000000;
-    cam_msg_.index = cam_frame_index_;
+    cam_msg_.frame_index = cam_frame_index_;
+    cam_msg_.camera_index = cam_index_;
 
     // Publish timestamp
     camera_timestamp_publisher_->publish(cam_msg_);
 
     // Update counter
-    camera_calibration_counter_++;
+    switch (cam_index_) {
+        case LEFT_CAM_ID:
+            camera_left_calibration_counter_++;
+        case RIGHT_CAM_ID:
+            camera_right_calibration_counter_++;
+        default:
+            throw std::runtime_error("Unknown camera ID in camera CAN message");
+    }
     
 }
 

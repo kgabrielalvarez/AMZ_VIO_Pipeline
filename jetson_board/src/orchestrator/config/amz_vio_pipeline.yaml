@@ -12,7 +12,7 @@ can_driver:
     # 5. 416 Hz
     # 6. 833 Hz
     imu_rate: 208 # Hz
-    camera_rate: 50 # FPS
+    camera_rate: 20 # FPS
 
 camera_driver:
   ros__parameters:
