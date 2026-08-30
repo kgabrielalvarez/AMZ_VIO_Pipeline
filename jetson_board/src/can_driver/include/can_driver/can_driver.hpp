@@ -41,9 +41,6 @@
 #define FINISHED_IMU_CAL_MSG     0xFF
 #define FINISHED_CAM_CAL_MSG     0x11
 
-// Delay between state transitions (use to give triggering board time to transition between states)
-#define STATE_SWITCH_DELAY        500 // [ms]
-
 // Type for converting uint8_t to float
 union bytes_to_float_t {
     uint8_t as_bytes[4];
@@ -107,7 +104,7 @@ class can_driver : public rclcpp::Node {
         amz_vio_pipeline_msgs::msg::CalibrationTimestamps calibration_timestamps_msg_;
         amz_vio_pipeline_msgs::msg::CameraTimestamps cam_msg_;
         sensor_msgs::msg::Imu imu_msg_;
-        std_msgs::msg::UInt8 imu_calibration_finished_msg_;
+        std_msgs::msg::Bool imu_calibration_finished_msg_;
         amz_vio_pipeline_msgs::msg::CameraCalibrationFinished camera_calibration_finished_msg_;
 
         // Write to CAN Bus
@@ -143,6 +140,7 @@ class can_driver : public rclcpp::Node {
         rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CalibrationTimestamps>::SharedPtr calibration_timestamps_publisher_;
         rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CameraTimestamps>::SharedPtr camera_timestamp_publisher_;
         rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr camera_calibration_samples_subscriber_;
+        rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr imu_calibration_finished_pubisher_;
         rclcpp::Publisher<amz_vio_pipeline_msgs::msg::CameraCalibrationFinished>::SharedPtr camera_calibration_finished_publisher_;
         rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr state_publisher_;
         rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr state_subscriber_;

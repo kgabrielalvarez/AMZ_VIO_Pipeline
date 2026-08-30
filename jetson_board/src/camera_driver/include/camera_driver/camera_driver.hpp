@@ -15,6 +15,7 @@
 // Include ROS2 libraries
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/u_int8.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "orchestrator/orchestrator_utils.hpp"
 #include "amz_vio_pipeline_msgs/msg/image_indexed.hpp"
 
@@ -49,10 +50,13 @@ class camera_driver : public rclcpp::Node {
         EPixelType pixel_type_pylon_ = PixelType_BayerRG8;
         std::string pixel_type_cv_ = sensor_msgs::image_encodings::BAYER_RGGB8;
         int cv_mat_type_ = CV_8UC1;
-        int retrieve_result_timeout_ = 1000; // ms
+        int retrieve_result_timeout_ = 5000; // ms
 
         // Thread to read images
         std::thread image_reader_thread_;
+
+        // Transition command message
+        std_msgs::msg::UInt8 transition_msg_;
 
         // Triggering board state and requested state to transition to
         triggering_board_state triggering_board_state_;
@@ -73,10 +77,13 @@ class camera_driver : public rclcpp::Node {
         // Publishers and subscriber
         rclcpp::Publisher<amz_vio_pipeline_msgs::msg::ImageIndexed>::SharedPtr left_image_publisher_;
         rclcpp::Publisher<amz_vio_pipeline_msgs::msg::ImageIndexed>::SharedPtr right_image_publisher_;
+        rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr imu_calibration_finished_subscriber_;
+        rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr state_publisher_;
         rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr state_subscriber_;
 
         // Callbacks
         void transition_handler_callback(const std_msgs::msg::UInt8::SharedPtr msg);
+        void imu_calibration_finished_callback(const std_msgs::msg::Bool::SharedPtr msg);
 
         // Methods: state transitions
         void transition_to_STOP();

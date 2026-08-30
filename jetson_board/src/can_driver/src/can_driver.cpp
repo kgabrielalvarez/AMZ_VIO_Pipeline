@@ -14,6 +14,7 @@ can_driver::can_driver() : Node("can_driver") {
     camera_timestamp_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::CameraTimestamps>("camera_timestamps", PUB_SUB_BUFFER_SIZE);
     camera_calibration_samples_subscriber_ = this->create_subscription<std_msgs::msg::Int32>("camera_calibration_samples",
         PUB_SUB_BUFFER_SIZE, std::bind(&can_driver::camera_calibration_samples_callback, this, std::placeholders::_1));
+    imu_calibration_finished_pubisher_ = this->create_publisher<std_msgs::msg::Bool>("imu_calibration_finished", PUB_SUB_BUFFER_SIZE);
     camera_calibration_finished_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::CameraCalibrationFinished>
         ("camera_calibration_finished", PUB_SUB_BUFFER_SIZE);
     state_publisher_ = this->create_publisher<std_msgs::msg::UInt8>("triggering_board_state", PUB_SUB_BUFFER_SIZE);
@@ -384,17 +385,18 @@ void can_driver::read_finished_can_msg() {
                     std::string(" IMU calibration timestamps, but expected ") + std::to_string(imu_calibration_samples_));
             }
 
+            // Create message to publish
+            imu_calibration_finished_msg_.data = true;
+
+            // Notify camera driver that IMU calibration phase is finished
+            imu_calibration_finished_pubisher_->publish(imu_calibration_finished_msg_);
+
+            // Log the total number of IMU calibration timestamps that were received
+            RCLCPP_INFO(this->get_logger(), "Received %d IMU calibration samples and expected %d", 
+                imu_calibration_counter_, imu_calibration_samples_);
+
             // Reset counter
             imu_calibration_counter_ = 0;
-
-            // Create message to publish
-            imu_calibration_finished_msg_.data = static_cast<uint8_t>(triggering_board_state::CAL_CAM);
-
-            // Wait for all the IMU calibration CAN messages to arrive before transitioning
-            rclcpp::sleep_for(std::chrono::milliseconds(STATE_SWITCH_DELAY));
-
-            // Request transition to CAM_CAL state
-            state_publisher_->publish(imu_calibration_finished_msg_);
 
             break;
 
@@ -421,7 +423,8 @@ void can_driver::read_finished_can_msg() {
 
             // Log the total number of camera calibration samples that were received
             RCLCPP_INFO(this->get_logger(), "Received %d left camera calibration samples", camera_left_calibration_counter_);
-            RCLCPP_INFO(this->get_logger(), "Received %d right camera calibration samples", camera_right_calibration_counter_);
+            RCLCPP_INFO(this->get_logger(), "Received %d right camera calibration samples and expected %d", 
+                camera_right_calibration_counter_, camera_calibration_samples_);
 
             // Reset counter
             camera_left_calibration_counter_ = 0;
@@ -477,6 +480,9 @@ void can_driver::read_cam_can_msg() {
     cam_msg_.frame_index = cam_frame_index_;
     cam_msg_.camera_index = cam_index_;
 
+    // FOR DEBUGGING PURPOSES DELETE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    RCLCPP_INFO(this->get_logger(), "Camera index = %d, frame index = %d", cam_index_, cam_frame_index_);
+
     // Publish timestamp
     camera_timestamp_publisher_->publish(cam_msg_);
 
@@ -484,10 +490,13 @@ void can_driver::read_cam_can_msg() {
     switch (cam_index_) {
         case LEFT_CAM_ID:
             camera_left_calibration_counter_++;
+            break;
         case RIGHT_CAM_ID:
             camera_right_calibration_counter_++;
+            break;
         default:
-            throw std::runtime_error("Unknown camera ID in camera CAN message");
+            throw std::runtime_error(std::string("Unknown camera ID: ") + std::to_string(cam_index_) + 
+                std::string(" in camera CAN message"));
     }
     
 }

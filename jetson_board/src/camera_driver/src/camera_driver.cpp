@@ -10,6 +10,9 @@ camera_driver::camera_driver() : Node("camera_driver") {
     // Initialize publishers and subscriber
     left_image_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::ImageIndexed>("left_images", PUB_SUB_BUFFER_SIZE);
     right_image_publisher_ = this->create_publisher<amz_vio_pipeline_msgs::msg::ImageIndexed>("right_images", PUB_SUB_BUFFER_SIZE);
+    imu_calibration_finished_subscriber_ = this->create_subscription<std_msgs::msg::Bool>("imu_calibration_finished", PUB_SUB_BUFFER_SIZE,
+        std::bind(&camera_driver::imu_calibration_finished_callback, this, std::placeholders::_1));
+    state_publisher_ = this->create_publisher<std_msgs::msg::UInt8>("triggering_board_state", PUB_SUB_BUFFER_SIZE);
     state_subscriber_ = this->create_subscription<std_msgs::msg::UInt8>("triggering_board_state", 
         PUB_SUB_BUFFER_SIZE, std::bind(&camera_driver::transition_handler_callback, this, std::placeholders::_1));
 
@@ -78,55 +81,7 @@ void camera_driver::transition_to_CAL_CAM() {
     // Perform state transition
     triggering_board_state_ = triggering_board_state::CAL_CAM;
 
-    // Initialize Pylon runtime
-    PylonInitialize();
-
-    // Configure cameras
-    try {
-        // General camera configuration
-        configure_cameras();
-
-        // Start getting images
-        cameras_.StartGrabbing();
-
-        // Log configuration parameters for left (master) camera
-        INodeMap& left_node_map = left_camera_.GetNodeMap();
-        RCLCPP_INFO(this->get_logger(), "Left camera TriggerSelector: %s", CEnumParameter(left_node_map, "TriggerSelector").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera TriggerMode: %s", CEnumParameter(left_node_map, "TriggerMode").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera TriggerSource: %s", CEnumParameter(left_node_map, "TriggerSource").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera TriggerActivation: %s", CEnumParameter(left_node_map, "TriggerActivation").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera ExposureMode: %s", CEnumParameter(left_node_map, "ExposureMode").GetValue().c_str());
-        CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
-        RCLCPP_INFO(this->get_logger(), "Left camera line 3: %s", CEnumParameter(left_node_map, "LineSource").GetValue().c_str());
-
-        // Log configuration parameters for right (slave) camera
-        INodeMap& right_node_map = right_camera_.GetNodeMap();
-        RCLCPP_INFO(this->get_logger(), "Right camera TriggerSelector: %s", CEnumParameter(right_node_map, "TriggerSelector").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Right camera TriggerMode: %s", CEnumParameter(right_node_map, "TriggerMode").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Right camera TriggerSource: %s", CEnumParameter(right_node_map, "TriggerSource").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Right camera TriggerActivation: %s", CEnumParameter(right_node_map, "TriggerActivation").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Right camera ExposureMode: %s", CEnumParameter(right_node_map, "ExposureMode").GetValue().c_str());
-        CEnumParameter(right_node_map, "LineSelector").SetValue("Line3");
-        RCLCPP_INFO(this->get_logger(), "Right camera line 3: %s", CEnumParameter(right_node_map, "LineSource").GetValue().c_str());
-
-        // Log exposure configuration parameters
-        RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
-        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
-        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
-
-        // Start thread to read images
-        image_reader_thread_ = std::thread(&camera_driver::read_images, this);
-    }
-
-    // Handle Pylon Specific Errors
-    catch (const GenericException& error) {
-        RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
-    }
-
-    // Handle Custom Errors
-    catch (const std::runtime_error& error) {
-        RCLCPP_ERROR(this->get_logger(), error.what());
-    }
+    // Do nothing in this state transition
 
     // Notify
     RCLCPP_INFO(this->get_logger(), "camera_driver node has entered %s", 
@@ -181,6 +136,69 @@ void camera_driver::transition_handler_callback(const std_msgs::msg::UInt8::Shar
             throw std::runtime_error("Requested state transition is not valid");
 
     }
+
+}
+
+void camera_driver::imu_calibration_finished_callback(const std_msgs::msg::Bool::SharedPtr msg) {
+
+    // Check that we received a "true" flag
+    if (msg->data == false) {
+        throw std::runtime_error("Received imu_calibration_finished = false");
+    }
+
+    // Initialize Pylon runtime
+    PylonInitialize();
+
+    // Configure cameras
+    try {
+        // General camera configuration
+        configure_cameras();
+
+        // Start getting images
+        cameras_.StartGrabbing();
+
+        // Log configuration parameters for left (master) camera
+        INodeMap& left_node_map = left_camera_.GetNodeMap();
+        RCLCPP_INFO(this->get_logger(), "Left camera TriggerSelector: %s", CEnumParameter(left_node_map, "TriggerSelector").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera TriggerMode: %s", CEnumParameter(left_node_map, "TriggerMode").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera TriggerSource: %s", CEnumParameter(left_node_map, "TriggerSource").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera TriggerActivation: %s", CEnumParameter(left_node_map, "TriggerActivation").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera ExposureMode: %s", CEnumParameter(left_node_map, "ExposureMode").GetValue().c_str());
+        CEnumParameter(left_node_map, "LineSelector").SetValue("Line3");
+        RCLCPP_INFO(this->get_logger(), "Left camera line 3: %s", CEnumParameter(left_node_map, "LineSource").GetValue().c_str());
+
+        // Log configuration parameters for right (slave) camera
+        INodeMap& right_node_map = right_camera_.GetNodeMap();
+        RCLCPP_INFO(this->get_logger(), "Right camera TriggerSelector: %s", CEnumParameter(right_node_map, "TriggerSelector").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera TriggerMode: %s", CEnumParameter(right_node_map, "TriggerMode").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera TriggerSource: %s", CEnumParameter(right_node_map, "TriggerSource").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera TriggerActivation: %s", CEnumParameter(right_node_map, "TriggerActivation").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Right camera ExposureMode: %s", CEnumParameter(right_node_map, "ExposureMode").GetValue().c_str());
+        CEnumParameter(right_node_map, "LineSelector").SetValue("Line3");
+        RCLCPP_INFO(this->get_logger(), "Right camera line 3: %s", CEnumParameter(right_node_map, "LineSource").GetValue().c_str());
+
+        // Log exposure configuration parameters
+        RCLCPP_INFO(this->get_logger(), "Left camera ExposureAuto: %s", CEnumParameter(left_node_map, "ExposureAuto").GetValue().c_str());
+        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeLowerLimit: %f us", CFloatParameter(left_node_map, "AutoExposureTimeLowerLimit").GetValue());
+        RCLCPP_INFO(this->get_logger(), "Left camera AutoExposureTimeUpperLimit: %f us", CFloatParameter(left_node_map, "AutoExposureTimeUpperLimit").GetValue());
+
+        // Start thread to read images
+        image_reader_thread_ = std::thread(&camera_driver::read_images, this);
+    }
+
+    // Handle Pylon Specific Errors
+    catch (const GenericException& error) {
+        RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
+    }
+
+    // Handle Custom Errors
+    catch (const std::runtime_error& error) {
+        RCLCPP_ERROR(this->get_logger(), error.what());
+    }
+
+    // Request transition to CAL_CAM state
+    transition_msg_.data = static_cast<uint8_t>(triggering_board_state::CAL_CAM);
+    state_publisher_->publish(transition_msg_);    
 
 }
 
@@ -292,7 +310,7 @@ void camera_driver::read_images() {
 
         // Handle Pylon Specific Errors
         catch (const GenericException& error) {
-            RCLCPP_INFO(this->get_logger(), "Left images count = %d", left_image_index_);
+            RCLCPP_INFO(this->get_logger(), "Left images count = %d", left_image_index_); // TO-DO Delete this for debugging only !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             RCLCPP_INFO(this->get_logger(), "Right images count = %d", right_image_index_);
             RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
             break;

@@ -232,7 +232,7 @@ void orchestrator::camera_timestamp_callback(const amz_vio_pipeline_msgs::msg::C
 
         case triggering_board_state::CAL_CAM:
 
-            switch(msg->frame_index) {
+            switch(msg->camera_index) {
                 
                 case (LEFT_CAM_ID):
                     
@@ -298,26 +298,27 @@ void orchestrator::timer_callback() {
         case triggering_board_state::CAL_CAM:
 
             // If possible, request transition to RUN
-            if ((camera_calibration_finished_ == true) &&
-                (left_image_index_ == total_left_calibration_samples_) &&
-                (right_image_index_ == total_right_calibration_samples_) &&
-                (left_camera_timestamp_index_ == total_left_calibration_samples_) &&
-                (right_camera_timestamp_index_ == total_right_calibration_samples_)) {
+            if (camera_calibration_finished_ == true) {
+                if ((left_image_index_ == total_left_calibration_samples_) &&
+                    (right_image_index_ == total_right_calibration_samples_) &&
+                    (left_camera_timestamp_index_ == total_left_calibration_samples_) &&
+                    (right_camera_timestamp_index_ == total_right_calibration_samples_)) {
 
-                    // Notify
-                    RCLCPP_INFO(this->get_logger(), "Camera calibration was successfull!");
-                    RCLCPP_INFO(this->get_logger(), "Received %d/%d left camera images", 
-                        left_image_index_, total_left_calibration_samples_);
-                    RCLCPP_INFO(this->get_logger(), "Received %d/%d right camera images", 
-                        right_image_index_, total_right_calibration_samples_);
-                    RCLCPP_INFO(this->get_logger(), "Received %d/%d left camera timestamps", 
-                        left_camera_timestamp_index_, total_left_calibration_samples_);
-                    RCLCPP_INFO(this->get_logger(), "Received %d/%d right camera timestamps", 
-                        right_camera_timestamp_index_, total_right_calibration_samples_);
+                        // Notify
+                        RCLCPP_INFO(this->get_logger(), "Camera calibration was successfull!");
+                        RCLCPP_INFO(this->get_logger(), "Received %d/%d left camera images", 
+                            left_image_index_, total_left_calibration_samples_);
+                        RCLCPP_INFO(this->get_logger(), "Received %d/%d right camera images", 
+                            right_image_index_, total_right_calibration_samples_);
+                        RCLCPP_INFO(this->get_logger(), "Received %d/%d left camera timestamps", 
+                            left_camera_timestamp_index_, total_left_calibration_samples_);
+                        RCLCPP_INFO(this->get_logger(), "Received %d/%d right camera timestamps", 
+                            right_camera_timestamp_index_, total_right_calibration_samples_);
 
-                    transition_msg_.data = static_cast<uint8_t>(triggering_board_state::RUN);
-                    state_publisher_->publish(transition_msg_);
+                        transition_msg_.data = static_cast<uint8_t>(triggering_board_state::RUN);
+                        state_publisher_->publish(transition_msg_);
 
+                }
             }
 
             break;
