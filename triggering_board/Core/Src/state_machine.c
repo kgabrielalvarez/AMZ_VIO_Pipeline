@@ -75,6 +75,7 @@ static volatile GPIO_PinState trigger_pin_capture_state;
 
 // Flags
 static volatile bool drdy_flag = false;
+static volatile bool imu_cal_finished_flag = false;
 static volatile bool exposure_act_1_flag = false;
 static volatile bool exposure_act_2_flag = false;
 static volatile bool tim2_started_flag = false;
@@ -161,22 +162,13 @@ void execute_STOP(void) {
 
 void execute_CAL_IMU(void) {
 
-	// Check that there is an IMU measurement ready
-	if (drdy_flag == false) {
+	// Check if the IMU calibration process is complete
+	if (imu_cal_finished_flag == true) {
 		return;
 	}
 
-	// Reset flag
-	drdy_flag = false;
-
-	// Check if we need more calibration timestamps
-	if (imu_calibration_counter > imu_calibration_samples) {
-		return;
-	}
-
-	// Check if we are done with the CAL_IMU phase
+	// Check if we are ready to send the finished message to proceed to the next phase
 	if (imu_calibration_counter == imu_calibration_samples) {
-		// Send CAN message notifying that CAL_IMU phase is complete
 		TxData3[0] = FINISHED_IMU_CAL_MSG;
 		memset(&TxData3[1], 0, BUFFER_SIZE-1);
 		TxHeader3.Identifier = FINISHED_CAN_ID;
@@ -184,25 +176,35 @@ void execute_CAL_IMU(void) {
 			error_state = FAILED_TO_SEND_CAN_FINISHED_MESSAGE;
 			Error_Handler();
 		}
+		imu_cal_finished_flag = true;
 		return;
 	}
 
-	// Read IMU timestamp and measurement (to empty measurement register)
-	read_imu_timestamp(&imu_timestamp);
-	read_imu_measurements(acceleration_mg, angular_rate_mdps);
+	// Check that there is an IMU measurement ready
+	if (drdy_flag == true) {
 
-	// Send CAN message with IMU and MCU timestamps
-	memcpy(&TxData3[0], &imu_timestamp, sizeof(uint32_t));
-	memcpy(&TxData3[4], &mcu_timestamp, sizeof(uint32_t));
-	memset(&TxData3[8], 0, BUFFER_SIZE-8);
-	TxHeader3.Identifier = TIMESTAMPS_CAN_ID;
-	if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
-		error_state = FAILED_TO_SEND_CAN_TIMESTAMPS_MESSAGE;
-		Error_Handler();
+		// Reset flag
+		drdy_flag = false;
+
+		// Read IMU timestamp and measurement (to empty measurement register)
+		read_imu_timestamp(&imu_timestamp);
+		read_imu_measurements(acceleration_mg, angular_rate_mdps);
+
+		// Send CAN message with IMU and MCU timestamps
+		memcpy(&TxData3[0], &imu_timestamp, sizeof(uint32_t));
+		memcpy(&TxData3[4], &mcu_timestamp, sizeof(uint32_t));
+		memset(&TxData3[8], 0, BUFFER_SIZE-8);
+		TxHeader3.Identifier = TIMESTAMPS_CAN_ID;
+		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+			error_state = FAILED_TO_SEND_CAN_TIMESTAMPS_MESSAGE;
+			Error_Handler();
+		}
+
+		// Update counter
+		imu_calibration_counter++;
+
+		return;
 	}
-
-	// Update counter
-	imu_calibration_counter++;
 
 }
 
@@ -329,6 +331,31 @@ void execute_CAL_CAM(void) {
 		}
 	}
 
+	// Check that there is an IMU measurement ready
+	if (drdy_flag == true) {
+		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_SET);
+		// Reset flag
+		drdy_flag = false;
+		// Read measurements
+//		read_imu_measurements(acceleration_mg, angular_rate_mdps);
+		// Send CAN message
+		memcpy(&TxData3[0], &acceleration_mg[0], sizeof(float));
+		memcpy(&TxData3[4], &acceleration_mg[1], sizeof(float));
+		memcpy(&TxData3[8], &acceleration_mg[2], sizeof(float));
+		memcpy(&TxData3[12], &angular_rate_mdps[0], sizeof(float));
+		memcpy(&TxData3[16], &angular_rate_mdps[1], sizeof(float));
+		memcpy(&TxData3[20], &angular_rate_mdps[2], sizeof(float));
+		memcpy(&TxData3[24], &mcu_timestamp, sizeof(uint32_t));
+		memset(&TxData3[28], 0, BUFFER_SIZE-28);
+		TxHeader3.Identifier = IMU_CAN_ID;
+		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+			error_state = FAILED_TO_SEND_CAN_IMU_MESSAGE;
+			Error_Handler();
+		}
+		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET);
+		return;
+	}
+
 }
 
 void execute_RUN(void) {
@@ -348,6 +375,20 @@ void transition_to_STOP(void) {
 
 	// Perform state transition
 	triggering_board_state = STOP;
+
+	// Reset counters
+	imu_calibration_counter = 0;
+	camera_counter_1 = 0;
+	camera_counter_2 = 0;
+
+	// Reset flags
+	drdy_flag = false;
+	imu_cal_finished_flag = false;
+	exposure_act_1_flag = false;
+	exposure_act_2_flag = false;
+	tim2_started_flag = false;
+	trigger_flag = false;
+
 }
 
 void transition_to_CAL_IMU(void) {
@@ -382,9 +423,6 @@ void transition_to_CAL_CAM(void) {
 	memcpy(&camera_calibration_samples, &RxData3[1], sizeof(int32_t));
 	memcpy(&camera_rate, &RxData3[5], sizeof(int32_t));
 	camera_period = (uint32_t) (1.0/((float)camera_rate) * S_TO_US); // [us]
-
-	// Reset IMU calibration counter
-	imu_calibration_counter = 0;
 
 	// Set the CCR for CH1 for the first trigger
 	start_of_camera_time = __HAL_TIM_GET_COUNTER(&htim2);

@@ -158,6 +158,9 @@ void configure_imu(int32_t rate) {
 	// Enable timestamps
 	asm330lhhxg1_timestamp_set(&dev_ctx, PROPERTY_ENABLE);
 
+	// Configure DRDY flag to be pulsed instead of latched
+	asm330lhhxg1_data_ready_mode_set(&dev_ctx, ASM330LHHXG1_DRDY_PULSED);
+
 	// Read freq_fine register
 	asm330lhhxg1_odr_cal_reg_get(&dev_ctx, &freq_fine);
 
@@ -169,24 +172,36 @@ void read_imu_measurements(float acceleration_mg[3], float angular_rate_mdps[3])
 	uint8_t data_ready;
 
 	// Read acceleration field data
-	asm330lhhxg1_xl_flag_data_ready_get(&dev_ctx, &data_ready);
+	if (asm330lhhxg1_xl_flag_data_ready_get(&dev_ctx, &data_ready) != 0) {
+		error_state = FAILED_TO_GET_XL_DRDY_FLAG;
+		Error_Handler();
+	}
 
 	// Convert acceleration to mg and store
 	if (data_ready) {
 		memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
-		asm330lhhxg1_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
+		if (asm330lhhxg1_acceleration_raw_get(&dev_ctx, data_raw_acceleration) != 0) {
+			error_state = FAILED_TO_READ_XL_REGISTER;
+			Error_Handler();
+		}
 		acceleration_mg[0] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[0]);
 		acceleration_mg[1] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[1]);
 		acceleration_mg[2] = asm330lhhxg1_from_fs4g_to_mg(data_raw_acceleration[2]);
 	}
 
     // Read angular rate field data
-	asm330lhhxg1_gy_flag_data_ready_get(&dev_ctx, &data_ready);
+	if (asm330lhhxg1_gy_flag_data_ready_get(&dev_ctx, &data_ready) != 0) {
+		error_state = FAILED_TO_GET_GY_DRDY_FLAG;
+		Error_Handler();
+	}
 
 	// Convert angular rate to mdps and store
 	if (data_ready) {
 		memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
-		asm330lhhxg1_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
+		if (asm330lhhxg1_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate) != 0) {
+			error_state = FAILED_TO_READ_GY_REGISTER;
+			Error_Handler();
+		}
 		angular_rate_mdps[0] = asm330lhhxg1_from_fs500dps_to_mdps(data_raw_angular_rate[0]);
 		angular_rate_mdps[1] = asm330lhhxg1_from_fs500dps_to_mdps(data_raw_angular_rate[1]);
 		angular_rate_mdps[2] = asm330lhhxg1_from_fs500dps_to_mdps(data_raw_angular_rate[2]);
@@ -195,5 +210,8 @@ void read_imu_measurements(float acceleration_mg[3], float angular_rate_mdps[3])
 }
 
 void read_imu_timestamp(uint32_t *timestamp) {
-	asm330lhhxg1_timestamp_raw_get(&dev_ctx, timestamp);
+	if (asm330lhhxg1_timestamp_raw_get(&dev_ctx, timestamp) != 0) {
+		error_state = FAILED_TO_READ_IMU_TIMESTAMP;
+		Error_Handler();
+	}
 }
