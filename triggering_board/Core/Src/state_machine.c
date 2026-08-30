@@ -184,6 +184,7 @@ void execute_CAL_IMU(void) {
 			error_state = FAILED_TO_SEND_CAN_FINISHED_MESSAGE;
 			Error_Handler();
 		}
+		return;
 	}
 
 	// Read IMU timestamp and measurement (to empty measurement register)
@@ -384,9 +385,6 @@ void transition_to_CAL_CAM(void) {
 
 	// Reset IMU calibration counter
 	imu_calibration_counter = 0;
-
-	// Delay to give camera_driver node time to switch states and configure fixed exposure mode
-	HAL_Delay(STATE_SWITCH_DELAY);
 
 	// Set the CCR for CH1 for the first trigger
 	start_of_camera_time = __HAL_TIM_GET_COUNTER(&htim2);

@@ -6,9 +6,6 @@
 #include "stdint.h"
 
 /* Macros --------------------------------------------------------------------*/
-// Delay between state transitions (used to give ROS2 nodes time to transition between states)
-#define STATE_SWITCH_DELAY 	   1000 // [ms]
-
 // Duration of trigger pulse
 #define TRIGGER_PULSE		    100 // [us]
 
