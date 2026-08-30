@@ -65,8 +65,10 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define PWR_FLAG_Pin GPIO_PIN_13
 #define PWR_FLAG_GPIO_Port GPIOC
-#define EXP_ACT_Pin GPIO_PIN_2
-#define EXP_ACT_GPIO_Port GPIOA
+#define EXP_ACT_1_Pin GPIO_PIN_1
+#define EXP_ACT_1_GPIO_Port GPIOA
+#define EXP_ACT_2_Pin GPIO_PIN_2
+#define EXP_ACT_2_GPIO_Port GPIOA
 #define TRIGGER_Pin GPIO_PIN_5
 #define TRIGGER_GPIO_Port GPIOA
 #define IMU_INT1_Pin GPIO_PIN_11

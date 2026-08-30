@@ -21,11 +21,12 @@ extern TIM_HandleTypeDef htim2;
 // Triggering board state
 static triggering_board_state_t triggering_board_state = STOP;
 
-// IMU and camera rates and number of calibration timestamps
+// IMU and camera rates and number of calibration samples
 static int32_t imu_rate; // [Hz]
 static int32_t camera_rate; // [FPS]
 static uint32_t camera_period; // [us]
-static int32_t imu_calibration_timestamps;
+static int32_t imu_calibration_samples;
+static int32_t camera_calibration_samples;
 
 // Camera exposure time
 static int32_t camera_exposure_time;
@@ -41,18 +42,22 @@ static volatile uint32_t mcu_timestamp;
 // 2. Used for IMU messages during nominal operation
 static uint32_t timestamp;
 // 3. Used for camera messages during nominal operation
-static uint32_t cam_timestamp;
+static uint32_t cam_timestamp_1;
+static uint32_t cam_timestamp_2;
 
 // Counter to keep track of the number of calibration timestamps that have been received
-static volatile int32_t calibration_timestamp_counter = 0;
+static volatile int32_t imu_calibration_counter = 0;
 
 // CCR value at which TRIGGER GPIO pin is fired
 static volatile uint32_t trigger_CCR;
 // Counter value at which frame exposure start and end
-static volatile uint32_t exposure_start;
-static volatile uint32_t exposure_end;
+static volatile uint32_t exposure_start_1;
+static volatile uint32_t exposure_end_1;
+static volatile uint32_t exposure_start_2;
+static volatile uint32_t exposure_end_2;
 // Instant at which capture occurs
-static volatile uint32_t exposure_capture_instant;
+static volatile uint32_t exposure_capture_instant_1;
+static volatile uint32_t exposure_capture_instant_2;
 static volatile uint32_t trigger_capture_instant;
 // Start of camera time
 static volatile uint32_t start_of_camera_time;
@@ -60,15 +65,18 @@ static volatile uint32_t start_of_camera_time;
 // Counter to track the number of trigger pulses that have been fired
 static volatile uint32_t trigger_counter = 0;
 // Counter to track the number of camera frames that have been captured
-static volatile uint32_t camera_counter = 0;
+static volatile uint32_t camera_counter_1 = 0;
+static volatile uint32_t camera_counter_2 = 0;
 
 // Exposure pin and trigger pin states
-static volatile GPIO_PinState exposure_pin_capture_state;
+static volatile GPIO_PinState exposure_pin_capture_state_1;
+static volatile GPIO_PinState exposure_pin_capture_state_2;
 static volatile GPIO_PinState trigger_pin_capture_state;
 
 // Flags
 static volatile bool drdy_flag = false;
-static volatile bool exposure_act_flag = false;
+static volatile bool exposure_act_1_flag = false;
+static volatile bool exposure_act_2_flag = false;
 static volatile bool tim2_started_flag = false;
 static volatile bool trigger_flag = false;
 
@@ -162,14 +170,14 @@ void execute_CAL_IMU(void) {
 	drdy_flag = false;
 
 	// Check if we need more calibration timestamps
-	if (calibration_timestamp_counter > imu_calibration_timestamps) {
+	if (imu_calibration_counter > imu_calibration_samples) {
 		return;
 	}
 
 	// Check if we are done with the CAL_IMU phase
-	if (calibration_timestamp_counter == imu_calibration_timestamps) {
+	if (imu_calibration_counter == imu_calibration_samples) {
 		// Send CAN message notifying that CAL_IMU phase is complete
-		TxData3[0] = FINISHED_CAN_MSG;
+		TxData3[0] = FINISHED_IMU_CAL_MSG;
 		memset(&TxData3[1], 0, BUFFER_SIZE-1);
 		TxHeader3.Identifier = FINISHED_CAN_ID;
 		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
@@ -193,7 +201,7 @@ void execute_CAL_IMU(void) {
 	}
 
 	// Update counter
-	calibration_timestamp_counter++;
+	imu_calibration_counter++;
 
 }
 
@@ -213,14 +221,18 @@ void execute_CAL_CAM(void) {
 				return;
 			// Set CCR value at which trigger pin should turn on
 			case GPIO_PIN_RESET:
+				// Check if we should continue triggering
+				if (camera_counter_2 >= camera_calibration_samples-1) {
+					return;
+				}
 				// 1. Exposure compensated mode cannot be used yet because a frame has not yet been captured by Pylon
-				if (camera_counter == 0) {
+				if (camera_counter_1 == 0) {
 					trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period;
 				}
 				// 2. Use exposure compensated mode
 				else {
 					trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period -
-								  (uint32_t)(((float)exposure_end - (float)exposure_start)/2.0);
+								  (uint32_t)(((float)exposure_end_1 - (float)exposure_start_1)/2.0);
 				}
 				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
 				return;
@@ -230,37 +242,88 @@ void execute_CAL_CAM(void) {
 		}
 	}
 
-	// Check whether there was a rising or falling edge on the EXP_ACT pin
-	if (exposure_act_flag == true) {
+	// Check whether there was a rising or falling edge on the EXP_ACT_1 pin
+	if (exposure_act_1_flag == true) {
 		// Reset flag
-		exposure_act_flag = false;
-		switch (exposure_pin_capture_state) {
+		exposure_act_1_flag = false;
+		switch (exposure_pin_capture_state_1) {
 			case (GPIO_PIN_SET):
 				// Save capture instant
-				exposure_start = exposure_capture_instant;
+				exposure_start_1 = exposure_capture_instant_1;
 				return;
 			case (GPIO_PIN_RESET):
 				// Check that falling edge corresponds to the same pulse as the previous rising edge
-				if ((exposure_capture_instant - exposure_start) > camera_period) {
-					error_state = EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE;
+				if ((exposure_capture_instant_1 - exposure_start_1) > camera_period) {
+					error_state = EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_1;
 					Error_Handler();
 				}
 				// Save capture instant
-				exposure_end = exposure_capture_instant;
+				exposure_end_1 = exposure_capture_instant_1;
 				// Update counter
-				camera_counter++;
+				camera_counter_1++;
 				// Send CAN message with camera timestamps
-				cam_timestamp = (uint32_t)(((float)exposure_end + (float)exposure_start)/2.0);
-				memcpy(&TxData3[0], &cam_timestamp, sizeof(uint32_t));
-				memset(&TxData3[4], 0, BUFFER_SIZE-4);
+				cam_timestamp_1 = (uint32_t)(((float)exposure_end_1 + (float)exposure_start_1)/2.0);
+				memcpy(&TxData3[0], &cam_timestamp_1, sizeof(uint32_t));
+				memcpy(&TxData3[4], &camera_counter_1, sizeof(uint32_t));
+				TxData3[8] = CAM_1_ID;
+				memset(&TxData3[9], 0, BUFFER_SIZE-9);
 				TxHeader3.Identifier = CAM_CAN_ID;
 				if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
-					error_state = FAILED_TO_SEND_CAN_CAM_MESSAGE;
+					error_state = FAILED_TO_SEND_CAN_CAM_MESSAGE_1;
 					Error_Handler();
 				}
 				return;
 			default:
-				error_state = EXP_ACT_PIN_IN_UNKNOWN_STATE;
+				error_state = EXP_ACT_1_PIN_IN_UNKNOWN_STATE;
+				Error_Handler();
+		}
+	}
+
+	// Check whether there was a rising or falling edge on the EXP_ACT_2 pin
+	if (exposure_act_2_flag == true) {
+		// Reset flag
+		exposure_act_2_flag = false;
+		switch (exposure_pin_capture_state_2) {
+			case (GPIO_PIN_SET):
+				// Save capture instant
+				exposure_start_2 = exposure_capture_instant_2;
+				return;
+			case (GPIO_PIN_RESET):
+				// Check that falling edge corresponds to the same pulse as the previous rising edge
+				if ((exposure_capture_instant_2 - exposure_start_2) > camera_period) {
+					error_state = EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_2;
+					Error_Handler();
+				}
+				// Save capture instant
+				exposure_end_2 = exposure_capture_instant_2;
+				// Update counter
+				camera_counter_2++;
+				// Send CAN message with camera timestamps
+				cam_timestamp_2 = (uint32_t)(((float)exposure_end_2 + (float)exposure_start_2)/2.0);
+				memcpy(&TxData3[0], &cam_timestamp_2, sizeof(uint32_t));
+				memcpy(&TxData3[4], &camera_counter_2, sizeof(uint32_t));
+				TxData3[8] = CAM_2_ID;
+				memset(&TxData3[9], 0, BUFFER_SIZE-9);
+				TxHeader3.Identifier = CAM_CAN_ID;
+				if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+					error_state = FAILED_TO_SEND_CAN_CAM_MESSAGE_2;
+					Error_Handler();
+				}
+				// If calibration phase is complete send finished message
+				if (camera_counter_2 == camera_calibration_samples) {
+					TxData3[0] = FINISHED_CAM_CAL_MSG;
+					memcpy(&TxData3[1], &camera_counter_1, sizeof(uint32_t));
+					memcpy(&TxData3[5], &camera_counter_2, sizeof(uint32_t));
+					memset(&TxData3[9], 0, BUFFER_SIZE-9);
+					TxHeader3.Identifier = FINISHED_CAN_ID;
+					if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+						error_state = FAILED_TO_SEND_CAN_FINISHED_MESSAGE;
+						Error_Handler();
+					}
+				}
+				return;
+			default:
+				error_state = EXP_ACT_2_PIN_IN_UNKNOWN_STATE;
 				Error_Handler();
 		}
 	}
@@ -297,7 +360,7 @@ void transition_to_CAL_IMU(void) {
 	triggering_board_state = CAL_IMU;
 
 	// Read relevant data
-	memcpy(&imu_calibration_timestamps, &RxData3[1], sizeof(int32_t));
+	memcpy(&imu_calibration_samples, &RxData3[1], sizeof(int32_t));
 	memcpy(&imu_rate, &RxData3[5], sizeof(int32_t));
 
 	// Configure IMU
@@ -315,11 +378,12 @@ void transition_to_CAL_CAM(void) {
 	triggering_board_state = CAL_CAM;
 
 	// Read relevant data
-	memcpy(&camera_rate, &RxData3[1], sizeof(int32_t));
+	memcpy(&camera_calibration_samples, &RxData3[1], sizeof(int32_t));
+	memcpy(&camera_rate, &RxData3[5], sizeof(int32_t));
 	camera_period = (uint32_t) (1.0/((float)camera_rate) * S_TO_US); // [us]
 
-	// Reset timestamp calibration counter
-	calibration_timestamp_counter = 0;
+	// Reset IMU calibration counter
+	imu_calibration_counter = 0;
 
 	// Delay to give camera_driver node time to switch states and configure fixed exposure mode
 	HAL_Delay(STATE_SWITCH_DELAY);
@@ -340,8 +404,6 @@ void transition_to_RUN(void) {
 	// Perform state transition
 	triggering_board_state = RUN;
 
-	// Read relevant data
-	memcpy(&camera_rate, &RxData3[1], sizeof(int32_t));
 }
 
 /* Define timer callbacks ----------------------------------------------------*/
@@ -355,10 +417,17 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
 	// Check what callback was triggered
 	switch (htim->Channel) {
-		case HAL_TIM_ACTIVE_CHANNEL_3: // EXP_ACT triggered
-			exposure_capture_instant = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3);
-			exposure_pin_capture_state = HAL_GPIO_ReadPin(EXP_ACT_GPIO_Port, EXP_ACT_Pin);
-			exposure_act_flag = true;
+
+		case HAL_TIM_ACTIVE_CHANNEL_2: // EXP_ACT_1 triggered
+			exposure_capture_instant_1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+			exposure_pin_capture_state_1 = HAL_GPIO_ReadPin(EXP_ACT_1_GPIO_Port, EXP_ACT_1_Pin);
+			exposure_act_1_flag = true;
+			break;
+
+		case HAL_TIM_ACTIVE_CHANNEL_3: // EXP_ACT_2 triggered
+			exposure_capture_instant_2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3);
+			exposure_pin_capture_state_2 = HAL_GPIO_ReadPin(EXP_ACT_2_GPIO_Port, EXP_ACT_2_Pin);
+			exposure_act_2_flag = true;
 			break;
 
 		case HAL_TIM_ACTIVE_CHANNEL_4: // IMU_INT1 triggered
