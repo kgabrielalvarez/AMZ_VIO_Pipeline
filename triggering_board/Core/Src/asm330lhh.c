@@ -158,8 +158,8 @@ void configure_imu(int32_t rate) {
 	// Enable timestamps
 	asm330lhhxg1_timestamp_set(&dev_ctx, PROPERTY_ENABLE);
 
-	// Configure DRDY flag to be pulsed instead of latched
-	asm330lhhxg1_data_ready_mode_set(&dev_ctx, ASM330LHHXG1_DRDY_PULSED);
+	// Configure DRDY flag to be latched
+	asm330lhhxg1_data_ready_mode_set(&dev_ctx, ASM330LHHXG1_DRDY_LATCHED);
 
 	// Read freq_fine register
 	asm330lhhxg1_odr_cal_reg_get(&dev_ctx, &freq_fine);

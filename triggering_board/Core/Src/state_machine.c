@@ -210,39 +210,26 @@ void execute_CAL_IMU(void) {
 
 void execute_CAL_CAM(void) {
 
-	// Check whether there was a rising or falling edge on the TRIGGER pin
+	// Check to see if there was a falling edge on the TRIGGER pin
 	if (trigger_flag == true) {
 		// Reset flag
 		trigger_flag = false;
-		switch (trigger_pin_capture_state) {
-			// Set CCR value at which trigger pin should turn off
-			case GPIO_PIN_SET:
-				trigger_CCR = trigger_capture_instant + TRIGGER_PULSE;
-				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
-				// Update trigger counter
-				trigger_counter++;
-				return;
-			// Set CCR value at which trigger pin should turn on
-			case GPIO_PIN_RESET:
-				// Check if we should continue triggering
-				if (camera_counter_2 >= camera_calibration_samples-1) {
-					return;
-				}
-				// 1. Exposure compensated mode cannot be used yet because a frame has not yet been captured by Pylon
-				if (camera_counter_1 == 0) {
-					trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period;
-				}
-				// 2. Use exposure compensated mode
-				else {
-					trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period -
-								  (uint32_t)(((float)exposure_end_1 - (float)exposure_start_1)/2.0);
-				}
-				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
-				return;
-			default:
-				error_state = TRIGGER_PIN_IN_UNKOWN_STATE;
-				Error_Handler();
+		// Check if we should continue triggering
+		if (camera_counter_2 >= camera_calibration_samples-1) {
+			return;
 		}
+		// Configure CCR for next trigger:
+		// 1. Exposure compensated mode cannot be used yet because a frame has not yet been captured by Pylon
+		if (camera_counter_1 == 0) {
+			trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period;
+		}
+		// 2. Use exposure compensated mode
+		else {
+			trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period -
+						  (uint32_t)(((float)exposure_end_1 - (float)exposure_start_1)/2.0);
+		}
+		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+		return;
 	}
 
 	// Check whether there was a rising or falling edge on the EXP_ACT_1 pin
@@ -333,11 +320,10 @@ void execute_CAL_CAM(void) {
 
 	// Check that there is an IMU measurement ready
 	if (drdy_flag == true) {
-		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_SET);
 		// Reset flag
 		drdy_flag = false;
 		// Read measurements
-//		read_imu_measurements(acceleration_mg, angular_rate_mdps);
+		read_imu_measurements(acceleration_mg, angular_rate_mdps);
 		// Send CAN message
 		memcpy(&TxData3[0], &acceleration_mg[0], sizeof(float));
 		memcpy(&TxData3[4], &acceleration_mg[1], sizeof(float));
@@ -352,13 +338,14 @@ void execute_CAL_CAM(void) {
 			error_state = FAILED_TO_SEND_CAN_IMU_MESSAGE;
 			Error_Handler();
 		}
-		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET);
 		return;
 	}
 
 }
 
 void execute_RUN(void) {
+
+	execute_CAL_CAM();
 
 }
 
@@ -428,6 +415,7 @@ void transition_to_CAL_CAM(void) {
 	start_of_camera_time = __HAL_TIM_GET_COUNTER(&htim2);
 	trigger_CCR = start_of_camera_time + camera_period;
 	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+
 }
 
 void transition_to_RUN(void) {
@@ -492,8 +480,26 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 		Error_Handler();
 	}
 
-	// Capture trigger instant, pin state, and set flag
-	trigger_capture_instant = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+	// Capture trigger instant and pin state
 	trigger_pin_capture_state = HAL_GPIO_ReadPin(TRIGGER_GPIO_Port, TRIGGER_Pin);
-	trigger_flag = true;
+	trigger_capture_instant = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+
+	// Check to see if we had a rising edge or falling edge
+	switch (trigger_pin_capture_state) {
+		// Set CCR value at which trigger pin should turn off
+		case GPIO_PIN_SET:
+			trigger_CCR = trigger_capture_instant + TRIGGER_PULSE;
+			__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+			// Update trigger counter
+			trigger_counter++;
+			break;
+		// Set flag so that next trigger pulse gets set in main loop
+		case GPIO_PIN_RESET:
+			trigger_flag = true;
+			break;
+		default:
+			error_state = TRIGGER_PIN_IN_UNKOWN_STATE;
+			Error_Handler();
+	}
+
 }
