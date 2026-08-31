@@ -475,13 +475,10 @@ void can_driver::read_cam_can_msg() {
     std::memcpy(&cam_timestamp_, &frame_.data[0], sizeof(uint32_t));
     std::memcpy(&cam_frame_index_, &frame_.data[4], sizeof(uint32_t));
     std::memcpy(&cam_index_, &frame_.data[8], sizeof(uint8_t));
-    cam_msg_.timestamp.sec = cam_timestamp_ / 1000;
-    cam_msg_.timestamp.nanosec = (cam_timestamp_ % 1000) * 1000000;
+    cam_msg_.timestamp.sec = cam_timestamp_ / 1000000;
+    cam_msg_.timestamp.nanosec = (cam_timestamp_ % 1000000) * 1000;
     cam_msg_.frame_index = cam_frame_index_;
     cam_msg_.camera_index = cam_index_;
-
-    // FOR DEBUGGING PURPOSES DELETE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    RCLCPP_INFO(this->get_logger(), "Camera index = %d, frame index = %d", cam_index_, cam_frame_index_);
 
     // Publish timestamp
     camera_timestamp_publisher_->publish(cam_msg_);
@@ -536,8 +533,8 @@ void can_driver::read_imu_can_msg() {
     imu_msg_.angular_velocity.x = angular_velocity_x_.as_float;
     imu_msg_.angular_velocity.y = angular_velocity_y_.as_float;
     imu_msg_.angular_velocity.z = angular_velocity_z_.as_float;
-    imu_msg_.header.stamp.sec = timestamp_.as_uint32 / 1000;
-    imu_msg_.header.stamp.nanosec = (timestamp_.as_uint32 % 1000) * 1000000;
+    imu_msg_.header.stamp.sec = timestamp_.as_uint32 / 1000000;
+    imu_msg_.header.stamp.nanosec = (timestamp_.as_uint32 % 1000000) * 1000;
 
     // Publish message
     imu_and_timestamp_publisher_->publish(imu_msg_);

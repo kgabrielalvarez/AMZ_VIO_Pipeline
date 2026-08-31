@@ -310,8 +310,6 @@ void camera_driver::read_images() {
 
         // Handle Pylon Specific Errors
         catch (const GenericException& error) {
-            RCLCPP_INFO(this->get_logger(), "Left images count = %d", left_image_index_); // TO-DO Delete this for debugging only !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            RCLCPP_INFO(this->get_logger(), "Right images count = %d", right_image_index_);
             RCLCPP_ERROR(this->get_logger(), "Pylon Error: %s", error.GetDescription());
             break;
         }
@@ -382,9 +380,6 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
             // Publish message
             left_image_publisher_->publish(left_image_message_);
 
-            // Notify
-            RCLCPP_INFO(this->get_logger(), "Published left image");
-
             break;
 
         case 1:
@@ -398,9 +393,6 @@ void camera_driver::convert_pylon_to_ros(const CGrabResultPtr& image_ptr) {
 
             // Publish message
             right_image_publisher_->publish(right_image_message_);
-
-            // Notify
-            RCLCPP_INFO(this->get_logger(), "Published right image");
 
             break;
 

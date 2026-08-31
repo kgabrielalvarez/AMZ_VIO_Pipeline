@@ -118,7 +118,7 @@ class can_driver : public rclcpp::Node {
         int32_t camera_rate_; // [FPS] User defined in YAML file
         int32_t camera_calibration_samples_ = 0; // User defined in YAML file
         int32_t imu_rate_; // [Hz] User defined in YAML file
-        int32_t imu_calibration_samples_ = 5*208;
+        int32_t imu_calibration_samples_ = 20; //5*208;
 
         // Camera and IMU rate bounds
         int32_t camera_rate_max_ = 168; // [FPS] max frame rate that the camera can achieve: https://www.baslerweb.com/en/shop/a2a1920-168mgc/

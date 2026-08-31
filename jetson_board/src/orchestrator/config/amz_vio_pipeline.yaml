@@ -1,6 +1,6 @@
 orchestrator:
   ros__parameters:
-    camera_calibration_samples: 500 # at 50 FPS this is 10s of data
+    camera_calibration_samples: 10 # at 50 FPS this is 5s of data
 
 can_driver:
   ros__parameters:
@@ -12,7 +12,7 @@ can_driver:
     # 5. 416 Hz
     # 6. 833 Hz
     imu_rate: 208 # Hz
-    camera_rate: 20 # FPS
+    camera_rate: 50 # FPS
 
 camera_driver:
   ros__parameters:

@@ -50,7 +50,7 @@ class camera_driver : public rclcpp::Node {
         EPixelType pixel_type_pylon_ = PixelType_BayerRG8;
         std::string pixel_type_cv_ = sensor_msgs::image_encodings::BAYER_RGGB8;
         int cv_mat_type_ = CV_8UC1;
-        int retrieve_result_timeout_ = 5000; // ms
+        int retrieve_result_timeout_ = 1000; // ms
 
         // Thread to read images
         std::thread image_reader_thread_;
