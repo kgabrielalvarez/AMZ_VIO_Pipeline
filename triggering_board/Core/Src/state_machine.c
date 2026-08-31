@@ -81,6 +81,9 @@ static volatile bool exposure_act_2_flag = false;
 static volatile bool tim2_started_flag = false;
 static volatile bool trigger_flag = false;
 
+static volatile bool testeroo_flag = false; // FOR DEBUGGING PURPOSES ONLY PLEASE DELETE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+static volatile bool testeroo_flag_prior = false;
+
 /* Declare file-scope functions ----------------------------------------------*/
 
 // State execution functions
@@ -210,39 +213,26 @@ void execute_CAL_IMU(void) {
 
 void execute_CAL_CAM(void) {
 
-	// Check whether there was a rising or falling edge on the TRIGGER pin
+	// Check to see if there was a falling edge on the TRIGGER pin
 	if (trigger_flag == true) {
 		// Reset flag
 		trigger_flag = false;
-		switch (trigger_pin_capture_state) {
-			// Set CCR value at which trigger pin should turn off
-			case GPIO_PIN_SET:
-				trigger_CCR = trigger_capture_instant + TRIGGER_PULSE;
-				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
-				// Update trigger counter
-				trigger_counter++;
-				return;
-			// Set CCR value at which trigger pin should turn on
-			case GPIO_PIN_RESET:
-				// Check if we should continue triggering
-				if (camera_counter_2 >= camera_calibration_samples-1) {
-					return;
-				}
-				// 1. Exposure compensated mode cannot be used yet because a frame has not yet been captured by Pylon
-				if (camera_counter_1 == 0) {
-					trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period;
-				}
-				// 2. Use exposure compensated mode
-				else {
-					trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period -
-								  (uint32_t)(((float)exposure_end_1 - (float)exposure_start_1)/2.0);
-				}
-				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
-				return;
-			default:
-				error_state = TRIGGER_PIN_IN_UNKOWN_STATE;
-				Error_Handler();
+		// Check if we should continue triggering
+		if (camera_counter_2 >= camera_calibration_samples-1) {
+			return;
 		}
+		// Configure CCR for next trigger:
+		// 1. Exposure compensated mode cannot be used yet because a frame has not yet been captured by Pylon
+		if (camera_counter_1 == 0) {
+			trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period;
+		}
+		// 2. Use exposure compensated mode
+		else {
+			trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period -
+						  (uint32_t)(((float)exposure_end_1 - (float)exposure_start_1)/2.0);
+		}
+		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+		return;
 	}
 
 	// Check whether there was a rising or falling edge on the EXP_ACT_1 pin
@@ -333,11 +323,10 @@ void execute_CAL_CAM(void) {
 
 	// Check that there is an IMU measurement ready
 	if (drdy_flag == true) {
-		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_SET);
 		// Reset flag
 		drdy_flag = false;
 		// Read measurements
-//		read_imu_measurements(acceleration_mg, angular_rate_mdps);
+		read_imu_measurements(acceleration_mg, angular_rate_mdps);
 		// Send CAN message
 		memcpy(&TxData3[0], &acceleration_mg[0], sizeof(float));
 		memcpy(&TxData3[4], &acceleration_mg[1], sizeof(float));
@@ -352,13 +341,120 @@ void execute_CAL_CAM(void) {
 			error_state = FAILED_TO_SEND_CAN_IMU_MESSAGE;
 			Error_Handler();
 		}
-		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET);
 		return;
 	}
 
 }
 
 void execute_RUN(void) {
+
+	// Check to see if there was a falling edge on the TRIGGER pin
+	if (trigger_flag == true) {
+		// Reset flag
+		trigger_flag = false;
+		// Configure CCR for next trigger
+		trigger_CCR = start_of_camera_time + (trigger_counter+1)*camera_period -
+					  (uint32_t)(((float)exposure_end_1 - (float)exposure_start_1)/2.0);
+		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+		return;
+	}
+
+	// Check whether there was a rising or falling edge on the EXP_ACT_1 pin
+	if (exposure_act_1_flag == true) {
+		// Reset flag
+		exposure_act_1_flag = false;
+		switch (exposure_pin_capture_state_1) {
+			case (GPIO_PIN_SET):
+				// Save capture instant
+				exposure_start_1 = exposure_capture_instant_1;
+				return;
+			case (GPIO_PIN_RESET):
+				// Check that falling edge corresponds to the same pulse as the previous rising edge
+				if ((exposure_capture_instant_1 - exposure_start_1) > camera_period) {
+					error_state = EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_1;
+					Error_Handler();
+				}
+				// Save capture instant
+				exposure_end_1 = exposure_capture_instant_1;
+				// Update counter
+				camera_counter_1++;
+				// Send CAN message with camera timestamps
+				cam_timestamp_1 = (uint32_t)(((float)exposure_end_1 + (float)exposure_start_1)/2.0);
+				memcpy(&TxData3[0], &cam_timestamp_1, sizeof(uint32_t));
+				memcpy(&TxData3[4], &camera_counter_1, sizeof(uint32_t));
+				TxData3[8] = CAM_1_ID;
+				memset(&TxData3[9], 0, BUFFER_SIZE-9);
+				TxHeader3.Identifier = CAM_CAN_ID;
+				if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+					error_state = FAILED_TO_SEND_CAN_CAM_MESSAGE_1;
+					Error_Handler();
+				}
+				return;
+			default:
+				error_state = EXP_ACT_1_PIN_IN_UNKNOWN_STATE;
+				Error_Handler();
+		}
+	}
+
+	// Check whether there was a rising or falling edge on the EXP_ACT_2 pin
+	if (exposure_act_2_flag == true) {
+		// Reset flag
+		exposure_act_2_flag = false;
+		switch (exposure_pin_capture_state_2) {
+			case (GPIO_PIN_SET):
+				// Save capture instant
+				exposure_start_2 = exposure_capture_instant_2;
+				return;
+			case (GPIO_PIN_RESET):
+				// Check that falling edge corresponds to the same pulse as the previous rising edge
+				if ((exposure_capture_instant_2 - exposure_start_2) > camera_period) {
+					error_state = EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_2;
+					Error_Handler();
+				}
+				// Save capture instant
+				exposure_end_2 = exposure_capture_instant_2;
+				// Update counter
+				camera_counter_2++;
+				// Send CAN message with camera timestamps
+				cam_timestamp_2 = (uint32_t)(((float)exposure_end_2 + (float)exposure_start_2)/2.0);
+				memcpy(&TxData3[0], &cam_timestamp_2, sizeof(uint32_t));
+				memcpy(&TxData3[4], &camera_counter_2, sizeof(uint32_t));
+				TxData3[8] = CAM_2_ID;
+				memset(&TxData3[9], 0, BUFFER_SIZE-9);
+				TxHeader3.Identifier = CAM_CAN_ID;
+				if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+					error_state = FAILED_TO_SEND_CAN_CAM_MESSAGE_2;
+					Error_Handler();
+				}
+				return;
+			default:
+				error_state = EXP_ACT_2_PIN_IN_UNKNOWN_STATE;
+				Error_Handler();
+		}
+	}
+
+	// Check that there is an IMU measurement ready
+	if (drdy_flag == true) {
+		// Reset flag
+		drdy_flag = false;
+		// Read measurements
+		read_imu_measurements(acceleration_mg, angular_rate_mdps);
+		// Send CAN message
+		memcpy(&TxData3[0], &acceleration_mg[0], sizeof(float));
+		memcpy(&TxData3[4], &acceleration_mg[1], sizeof(float));
+		memcpy(&TxData3[8], &acceleration_mg[2], sizeof(float));
+		memcpy(&TxData3[12], &angular_rate_mdps[0], sizeof(float));
+		memcpy(&TxData3[16], &angular_rate_mdps[1], sizeof(float));
+		memcpy(&TxData3[20], &angular_rate_mdps[2], sizeof(float));
+		memcpy(&TxData3[24], &mcu_timestamp, sizeof(uint32_t));
+		memset(&TxData3[28], 0, BUFFER_SIZE-28);
+		TxHeader3.Identifier = IMU_CAN_ID;
+		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
+			error_state = FAILED_TO_SEND_CAN_IMU_MESSAGE;
+			Error_Handler();
+		}
+		return;
+	}
 
 }
 
@@ -406,7 +502,9 @@ void transition_to_CAL_IMU(void) {
 	memcpy(&imu_rate, &RxData3[5], sizeof(int32_t));
 
 	// Configure IMU
+	testeroo_flag_prior = true;
 	configure_imu(imu_rate);
+	testeroo_flag = true;
 }
 
 void transition_to_CAL_CAM(void) {
@@ -424,10 +522,11 @@ void transition_to_CAL_CAM(void) {
 	memcpy(&camera_rate, &RxData3[5], sizeof(int32_t));
 	camera_period = (uint32_t) (1.0/((float)camera_rate) * S_TO_US); // [us]
 
-	// Set the CCR for CH1 for the first trigger
+	// Set the CCR on CH1 for the first trigger
 	start_of_camera_time = __HAL_TIM_GET_COUNTER(&htim2);
 	trigger_CCR = start_of_camera_time + camera_period;
 	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+
 }
 
 void transition_to_RUN(void) {
@@ -440,9 +539,18 @@ void transition_to_RUN(void) {
 	// Perform state transition
 	triggering_board_state = RUN;
 
+	// Reset the trigger counter
+	trigger_counter = 0;
+
+	// Set the CCR on CH1 for the first trigger of the RUN phase
+	start_of_camera_time = __HAL_TIM_GET_COUNTER(&htim2);
+	trigger_CCR = start_of_camera_time + camera_period;
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+
 }
 
 /* Define timer callbacks ----------------------------------------------------*/
+
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	// Check that TIM2 triggered the callback
@@ -492,8 +600,26 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 		Error_Handler();
 	}
 
-	// Capture trigger instant, pin state, and set flag
-	trigger_capture_instant = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+	// Capture trigger instant and pin state
 	trigger_pin_capture_state = HAL_GPIO_ReadPin(TRIGGER_GPIO_Port, TRIGGER_Pin);
-	trigger_flag = true;
+	trigger_capture_instant = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+
+	// Check to see if we had a rising edge or falling edge
+	switch (trigger_pin_capture_state) {
+		// Set CCR value at which trigger pin should turn off
+		case GPIO_PIN_SET:
+			trigger_CCR = trigger_capture_instant + TRIGGER_PULSE;
+			__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+			// Update trigger counter
+			trigger_counter++;
+			break;
+		// Set flag so that next trigger pulse gets set in main loop
+		case GPIO_PIN_RESET:
+			trigger_flag = true;
+			break;
+		default:
+			error_state = TRIGGER_PIN_IN_UNKOWN_STATE;
+			Error_Handler();
+	}
+
 }

@@ -7,7 +7,7 @@
 
 /* Macros --------------------------------------------------------------------*/
 // Duration of trigger pulse
-#define TRIGGER_PULSE		    100 // [us]
+#define TRIGGER_PULSE		   200 // [us]
 
 // Conversion from s to us
 #define S_TO_US		 pow(10.0, 6.0)
@@ -61,6 +61,12 @@ typedef enum {
 	FAILED_TO_GET_XL_DRDY_FLAG,
 	FAILED_TO_GET_GY_DRDY_FLAG,
 	FAILED_TO_READ_IMU_TIMESTAMP,
+	FAILED_TO_READ_IMU_WHOAMI,
+	WHOAMI_REGISTER_INCORRECT,
+
+	// SPI
+	SPI_TRANSMIT_FAILED,
+	SPI_RECEIVE_FAILED,
 
 	// TIM
 	UNKOWN_TIMER_TRIGGERED_CALLBACK,
@@ -68,7 +74,8 @@ typedef enum {
 	OUTPUT_CAPTURE_TRIGGERED_ON_UNKOWN_CHANNEL,
 	TRIGGER_PIN_IN_UNKOWN_STATE,
 	EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_1,
-	EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_2
+	EXP_ACT_EDGES_DO_NOT_CORRESPOND_TO_SAME_PULSE_2,
+	TRIGGER_PIN_STUCK_IN_LATCHED_HIGH,
 
 } error_code_t;
 

@@ -67,8 +67,14 @@ int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t 
 int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len) {
     reg |= 0x80;
     HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(handle, &reg, 1, TIMEOUT);
-    HAL_SPI_Receive(handle, bufp, len, TIMEOUT);
+    if (HAL_SPI_Transmit(handle, &reg, 1, TIMEOUT) != HAL_OK) {
+    	error_state = SPI_TRANSMIT_FAILED;
+    	Error_Handler();
+    }
+    if (HAL_SPI_Receive(handle, bufp, len, TIMEOUT) != HAL_OK) {
+    	error_state = SPI_RECEIVE_FAILED;
+    	Error_Handler();
+    }
     HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
     return 0;
 }
@@ -95,8 +101,14 @@ void configure_imu(int32_t rate) {
     HAL_Delay(BOOT_TIME);
 
     // Check device ID
-    asm330lhhxg1_device_id_get(&dev_ctx, &whoamI);
-    if (whoamI != ASM330LHHXG1_ID) while(1);
+    if (asm330lhhxg1_device_id_get(&dev_ctx, &whoamI) != 0) {
+    	error_state = FAILED_TO_READ_IMU_WHOAMI;
+    	Error_Handler();
+    }
+    if (whoamI != ASM330LHHXG1_ID) {
+    	error_state = WHOAMI_REGISTER_INCORRECT;
+    	Error_Handler();
+    }
 
     // Restore default configuration
     asm330lhhxg1_reset_set(&dev_ctx, PROPERTY_ENABLE);
@@ -158,8 +170,8 @@ void configure_imu(int32_t rate) {
 	// Enable timestamps
 	asm330lhhxg1_timestamp_set(&dev_ctx, PROPERTY_ENABLE);
 
-	// Configure DRDY flag to be pulsed instead of latched
-	asm330lhhxg1_data_ready_mode_set(&dev_ctx, ASM330LHHXG1_DRDY_PULSED);
+	// Configure DRDY flag to be latched
+	asm330lhhxg1_data_ready_mode_set(&dev_ctx, ASM330LHHXG1_DRDY_LATCHED);
 
 	// Read freq_fine register
 	asm330lhhxg1_odr_cal_reg_get(&dev_ctx, &freq_fine);
