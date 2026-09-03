@@ -12,9 +12,9 @@ can_driver:
     # 5. 416 Hz
     # 6. 833 Hz
     imu_rate: 208 # Hz
-    camera_rate: 50 # FPS
+    camera_rate: 10 # FPS
 
 camera_driver:
   ros__parameters:
-    min_exposure_time: 3000.0 # [us] <-- think about this more!!!  I just made something up
-    max_exposure_time: 5000.0 # [us] <-- think about this more!!!  I just made something up
+    min_exposure_time: 998.0 # [us] <-- think about this more!!!  I just made something up
+    max_exposure_time: 1002.0 # [us] <-- think about this more!!!  I just made something up
