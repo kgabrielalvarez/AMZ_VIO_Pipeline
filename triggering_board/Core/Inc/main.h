@@ -77,8 +77,6 @@ void Error_Handler(void);
 #define CS_GPIO_Port GPIOA
 #define VSENSE_Pin GPIO_PIN_4
 #define VSENSE_GPIO_Port GPIOB
-#define DEBUG_LED_Pin GPIO_PIN_5
-#define DEBUG_LED_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

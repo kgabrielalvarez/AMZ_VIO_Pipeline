@@ -16,6 +16,7 @@ volatile bool state_transition_requested_flag = false;
 /* Declare external variables ------------------------------------------------*/
 extern FDCAN_HandleTypeDef hfdcan3;
 extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim17;
 
 /* Declare file-scope variables ----------------------------------------------*/
 // Triggering board state
@@ -80,9 +81,6 @@ static volatile bool exposure_act_1_flag = false;
 static volatile bool exposure_act_2_flag = false;
 static volatile bool tim2_started_flag = false;
 static volatile bool trigger_flag = false;
-
-static volatile bool testeroo_flag = false; // FOR DEBUGGING PURPOSES ONLY PLEASE DELETE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-static volatile bool testeroo_flag_prior = false;
 
 /* Declare file-scope functions ----------------------------------------------*/
 
@@ -502,9 +500,8 @@ void transition_to_CAL_IMU(void) {
 	memcpy(&imu_rate, &RxData3[5], sizeof(int32_t));
 
 	// Configure IMU
-	testeroo_flag_prior = true;
 	configure_imu(imu_rate);
-	testeroo_flag = true;
+
 }
 
 void transition_to_CAL_CAM(void) {
@@ -544,8 +541,12 @@ void transition_to_RUN(void) {
 
 	// Set the CCR on CH1 for the first trigger of the RUN phase
 	start_of_camera_time = __HAL_TIM_GET_COUNTER(&htim2);
+//	HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_SET);
 	trigger_CCR = start_of_camera_time + camera_period;
 	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, trigger_CCR);
+//	HAL_Delay(1);
+//	HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET);
+//	HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1);
 
 }
 
