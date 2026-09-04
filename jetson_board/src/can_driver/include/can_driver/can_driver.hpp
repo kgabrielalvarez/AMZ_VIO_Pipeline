@@ -10,6 +10,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <thread>
+#include <cstdint>
 
 // Include ROS2 libraries
 #include "rclcpp/rclcpp.hpp"
@@ -85,7 +86,7 @@ class can_driver : public rclcpp::Node {
         bytes_to_float_t angular_velocity_x_; // [rad/s]
         bytes_to_float_t angular_velocity_y_; // [rad/s]
         bytes_to_float_t angular_velocity_z_; // [rad/s]
-        bytes_to_float_t timestamp_;          // [ms]
+        uint32_t timestamp_;          // [ms]
 
         // Variables to publish in calibration_timestamps msg
         uint32_t imu_timestamp_;

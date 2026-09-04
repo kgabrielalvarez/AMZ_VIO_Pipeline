@@ -501,7 +501,8 @@ void can_driver::read_cam_can_msg() {
 void can_driver::read_imu_can_msg() {
 
     // Check that message was sent from correct state
-    if ((triggering_board_state_ != triggering_board_state::CAL_CAM) &&
+    if ((triggering_board_state_ != triggering_board_state::CAL_IMU) &&
+        (triggering_board_state_ != triggering_board_state::CAL_CAM) &&
         (triggering_board_state_ != triggering_board_state::RUN)) {
         throw std::runtime_error(std::string("IMU CAN message sent from ") +
             state_to_string(triggering_board_state_).c_str() + std::string(" instead of CAL_CAM or RUN state"));
@@ -514,7 +515,7 @@ void can_driver::read_imu_can_msg() {
     std::memcpy(&angular_velocity_x_.as_bytes[0], &frame_.data[12], sizeof(float));
     std::memcpy(&angular_velocity_y_.as_bytes[0], &frame_.data[16], sizeof(float));
     std::memcpy(&angular_velocity_z_.as_bytes[0], &frame_.data[20], sizeof(float));
-    std::memcpy(&timestamp_.as_bytes[0], &frame_.data[24], sizeof(uint32_t));
+    std::memcpy(&timestamp_, &frame_.data[24], sizeof(uint32_t));
 
     // Unit conversion:
     // 1. Accelerometer: mg to m/s^2
@@ -533,8 +534,9 @@ void can_driver::read_imu_can_msg() {
     imu_msg_.angular_velocity.x = angular_velocity_x_.as_float;
     imu_msg_.angular_velocity.y = angular_velocity_y_.as_float;
     imu_msg_.angular_velocity.z = angular_velocity_z_.as_float;
-    imu_msg_.header.stamp.sec = timestamp_.as_uint32 / 1000000;
-    imu_msg_.header.stamp.nanosec = (timestamp_.as_uint32 % 1000000) * 1000;
+    double timestamp_us = static_cast<double>(timestamp_)*23.5849;
+    imu_msg_.header.stamp.sec = static_cast<int32_t>(timestamp_us/1.0e6);
+    imu_msg_.header.stamp.nanosec = static_cast<uint32_t>(std::fmod(timestamp_us,1.0e6)*1000.0);
 
     // Publish message
     imu_and_timestamp_publisher_->publish(imu_msg_);
