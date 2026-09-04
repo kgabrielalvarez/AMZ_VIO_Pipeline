@@ -3,6 +3,11 @@ jetson_board/build/*
 jetson_board/log/*
 jetson_board/install/*
 jetson_board/rosbags/*
+jetson_board/allan_variance_rosbags/*
+jetson_board/src/allan_variance_ros2/*
+jetson_board/csv/*
+jetson_board/images/*
+jetson_board/rosbag2*
 
 #settings
 .settings/
