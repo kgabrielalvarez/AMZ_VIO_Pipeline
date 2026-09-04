@@ -87,6 +87,9 @@ extern error_code_t error_state;
 // Flags
 extern volatile bool state_transition_requested_flag;
 
+// Value in FREQ_FINE register
+extern int8_t freq_fine;
+
 /* Declare functions ---------------------------------------------------------*/
 
 // Decides what code to execute based on the current state
