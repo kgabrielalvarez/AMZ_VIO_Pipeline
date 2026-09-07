@@ -103,7 +103,7 @@ static void transition_to_RUN(void);
 void state_machine_handler(void) {
 
 	// Check whether state transition needs to be performed
-	if (state_transition_requested_flag) {
+ro	if (state_transition_requested_flag) {
 
 		// Perform state transition
 		switch (RxData3[0]) {
@@ -165,47 +165,28 @@ void execute_STOP(void) {
 
 void execute_CAL_IMU(void) {
 
-	// Check if the IMU calibration process is complete
-	if (imu_cal_finished_flag == true) {
-		return;
-	}
-
-	// Check if we are ready to send the finished message to proceed to the next phase
-	if (imu_calibration_counter == imu_calibration_samples) {
-		TxData3[0] = FINISHED_IMU_CAL_MSG;
-		memset(&TxData3[1], 0, BUFFER_SIZE-1);
-		TxHeader3.Identifier = FINISHED_CAN_ID;
-		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
-			error_state = FAILED_TO_SEND_CAN_FINISHED_MESSAGE;
-			Error_Handler();
-		}
-		imu_cal_finished_flag = true;
-		return;
-	}
-
 	// Check that there is an IMU measurement ready
 	if (drdy_flag == true) {
-
 		// Reset flag
 		drdy_flag = false;
-
-		// Read IMU timestamp and measurement (to empty measurement register)
-		read_imu_timestamp(&imu_timestamp);
+		// Read measurements
 		read_imu_measurements(acceleration_mg, angular_rate_mdps);
-
-		// Send CAN message with IMU and MCU timestamps
-		memcpy(&TxData3[0], &imu_timestamp, sizeof(uint32_t));
-		memcpy(&TxData3[4], &mcu_timestamp, sizeof(uint32_t));
-		memset(&TxData3[8], 0, BUFFER_SIZE-8);
-		TxHeader3.Identifier = TIMESTAMPS_CAN_ID;
+		// Read timestmap
+//		read_imu_timestamp(&imu_timestamp);
+		// Send CAN message
+		memcpy(&TxData3[0], &acceleration_mg[0], sizeof(float));
+		memcpy(&TxData3[4], &acceleration_mg[1], sizeof(float));
+		memcpy(&TxData3[8], &acceleration_mg[2], sizeof(float));
+		memcpy(&TxData3[12], &angular_rate_mdps[0], sizeof(float));
+		memcpy(&TxData3[16], &angular_rate_mdps[1], sizeof(float));
+		memcpy(&TxData3[20], &angular_rate_mdps[2], sizeof(float));
+		memcpy(&TxData3[24], &mcu_timestamp, sizeof(uint32_t));
+		memset(&TxData3[28], 0, BUFFER_SIZE-28);
+		TxHeader3.Identifier = IMU_CAN_ID;
 		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader3, TxData3) != HAL_OK) {
-			error_state = FAILED_TO_SEND_CAN_TIMESTAMPS_MESSAGE;
+			error_state = FAILED_TO_SEND_CAN_IMU_MESSAGE;
 			Error_Handler();
 		}
-
-		// Update counter
-		imu_calibration_counter++;
-
 		return;
 	}
 
