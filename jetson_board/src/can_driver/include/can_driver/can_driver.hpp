@@ -86,7 +86,9 @@ class can_driver : public rclcpp::Node {
         bytes_to_float_t angular_velocity_x_; // [rad/s]
         bytes_to_float_t angular_velocity_y_; // [rad/s]
         bytes_to_float_t angular_velocity_z_; // [rad/s]
-        uint32_t timestamp_;          // [ms]
+        uint32_t timestamp_;          // [us]
+        uint32_t timestamp_previous_ = 0; // [us]
+        uint32_t overflow_counter_ = 0;
 
         // Variables to publish in calibration_timestamps msg
         uint32_t imu_timestamp_;

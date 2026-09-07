@@ -534,9 +534,15 @@ void can_driver::read_imu_can_msg() {
     imu_msg_.angular_velocity.x = angular_velocity_x_.as_float;
     imu_msg_.angular_velocity.y = angular_velocity_y_.as_float;
     imu_msg_.angular_velocity.z = angular_velocity_z_.as_float;
-    double timestamp_us = static_cast<double>(timestamp_)*23.5849;
-    imu_msg_.header.stamp.sec = static_cast<int32_t>(timestamp_us/1.0e6);
-    imu_msg_.header.stamp.nanosec = static_cast<uint32_t>(std::fmod(timestamp_us,1.0e6)*1000.0);
+
+    // Timestamp
+    if (timestamp_ < timestamp_previous_) {
+        overflow_counter_++;
+    }
+    uint64_t timestamp_us = overflow_counter_*(4294967296ULL) + static_cast<uint64_t>(timestamp_);
+    imu_msg_.header.stamp.sec = static_cast<int32_t>(timestamp_us/1000000ULL);
+    imu_msg_.header.stamp.nanosec = static_cast<uint32_t>((timestamp_us % 1000000ULL)*1000ULL);
+    timestamp_previous_ = timestamp_;
 
     // Publish message
     imu_and_timestamp_publisher_->publish(imu_msg_);
