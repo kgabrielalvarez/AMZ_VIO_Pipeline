@@ -522,9 +522,9 @@ void can_driver::read_imu_can_msg() {
     acceleration_x_.as_float = acceleration_x_.as_float*mg_to_ms2_;
     acceleration_y_.as_float = acceleration_y_.as_float*mg_to_ms2_;
     acceleration_z_.as_float = acceleration_z_.as_float*mg_to_ms2_;
-    angular_velocity_x_.as_float = angular_velocity_x_.as_float*dps_to_rps_;
-    angular_velocity_y_.as_float = angular_velocity_y_.as_float*dps_to_rps_;
-    angular_velocity_z_.as_float = angular_velocity_z_.as_float*dps_to_rps_;
+    angular_velocity_x_.as_float = angular_velocity_x_.as_float*mdps_to_rps_;
+    angular_velocity_y_.as_float = angular_velocity_y_.as_float*mdps_to_rps_;
+    angular_velocity_z_.as_float = angular_velocity_z_.as_float*mdps_to_rps_;
 
     // Pass readings to publisher message
     imu_msg_.linear_acceleration.x = acceleration_x_.as_float;

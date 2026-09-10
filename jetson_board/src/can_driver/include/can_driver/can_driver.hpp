@@ -98,7 +98,7 @@ class can_driver : public rclcpp::Node {
 
         // Unit conversion factors
         float mg_to_ms2_ = 9.81/1000.0;
-        float dps_to_rps_ = 3.1415926535/180.0;
+        float mdps_to_rps_ = (1.0/1000.0)*(3.1415926535/180.0);
 
         // Messages to publish
         amz_vio_pipeline_msgs::msg::CalibrationTimestamps calibration_timestamps_msg_;
@@ -122,7 +122,7 @@ class can_driver : public rclcpp::Node {
 
         // Camera and IMU rate bounds
         int32_t camera_rate_max_ = 168; // [FPS] max frame rate that the camera can achieve: https://www.baslerweb.com/en/shop/a2a1920-168mgc/
-        int32_t camera_rate_min_ = 10; // [FPS] TO-DO: think about this more deeply, I just made this up 
+        int32_t camera_rate_min_ = 3; // [FPS] TO-DO: think about this more deeply, I just made this up 
 
         // Counter to keep track of the number of IMU calibration timestamps that have been received
         int32_t imu_calibration_counter_ = 0;
