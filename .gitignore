@@ -7,6 +7,7 @@ jetson_board/images/*
 jetson_board/csv/*
 jetson_board/rosbag2*
 jetson_board/allan_variance_rosbags/*
+jetson_board/allan_variance/*
 
 #settings
 .settings/

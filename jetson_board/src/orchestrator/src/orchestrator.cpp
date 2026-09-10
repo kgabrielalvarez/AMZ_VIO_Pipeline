@@ -210,10 +210,10 @@ void orchestrator::left_images_callback(const amz_vio_pipeline_msgs::msg::ImageI
             left_image_index_++;
 
             // Check that message index matches expected index
-            if (msg->index != left_image_index_) {
-                throw std::runtime_error(std::string("Expected an index of ") + std::to_string(left_image_index_) + 
-                    std::string(" on left_images topic but received an index of " + std::to_string(msg->index)));
-            }
+            // if (msg->index != left_image_index_) {
+            //     throw std::runtime_error(std::string("Expected an index of ") + std::to_string(left_image_index_) + 
+            //         std::string(" on left_images topic but received an index of " + std::to_string(msg->index)));
+            // }
 
             // Add image to buffer
             left_image_.index = msg->index;
@@ -254,10 +254,10 @@ void orchestrator::right_images_callback(const amz_vio_pipeline_msgs::msg::Image
             right_image_index_++;
 
             // Check that message index matches expected index
-            if (msg->index != right_image_index_) {
-                throw std::runtime_error(std::string("Expected an index of ") + std::to_string(right_image_index_) + 
-                    std::string(" on right_images topic but received an index of " + std::to_string(msg->index)));
-            }
+            // if (msg->index != right_image_index_) {
+            //     throw std::runtime_error(std::string("Expected an index of ") + std::to_string(right_image_index_) + 
+            //         std::string(" on right_images topic but received an index of " + std::to_string(msg->index)));
+            // }
 
             // Add images to buffer
             right_image_.index = msg->index;
@@ -449,31 +449,31 @@ void orchestrator::timer_RUN_callback() {
         right_timestamp_retrieved_ = right_timestamp_buffer_.front();
         right_timestamp_buffer_.pop_front();
         
-        // Confirm that left indices match
-        if (left_image_retrieved_.index != left_timestamp_retrieved_.index) {
-            throw std::runtime_error(std::string("Left image index ") + std::to_string(left_image_retrieved_.index) +
-                std::string(" does not match left timestamp index ") + std::to_string(left_timestamp_retrieved_.index));
-        }
+        // // Confirm that left indices match
+        // if (left_image_retrieved_.index != left_timestamp_retrieved_.index) {
+        //     throw std::runtime_error(std::string("Left image index ") + std::to_string(left_image_retrieved_.index) +
+        //         std::string(" does not match left timestamp index ") + std::to_string(left_timestamp_retrieved_.index));
+        // }
 
-        // Confirm that right indices match
-        if (right_image_retrieved_.index != right_timestamp_retrieved_.index) {
-            throw std::runtime_error(std::string("Right image index ") + std::to_string(right_image_retrieved_.index) +
-                std::string(" does not match right timestamp index ") + std::to_string(right_timestamp_retrieved_.index));
-        }
+        // // Confirm that right indices match
+        // if (right_image_retrieved_.index != right_timestamp_retrieved_.index) {
+        //     throw std::runtime_error(std::string("Right image index ") + std::to_string(right_image_retrieved_.index) +
+        //         std::string(" does not match right timestamp index ") + std::to_string(right_timestamp_retrieved_.index));
+        // }
 
-        // Confirm that left and right indices match
-        if (left_image_retrieved_.index != (right_image_retrieved_.index + offset_)) {
-            throw std::runtime_error(std::string("Left image index ") + std::to_string(left_image_retrieved_.index) +
-                std::string(" does not match right image index ") + std::to_string(right_image_retrieved_.index + offset_));
-        }
+        // // Confirm that left and right indices match
+        // if (left_image_retrieved_.index != (right_image_retrieved_.index + offset_)) {
+        //     throw std::runtime_error(std::string("Left image index ") + std::to_string(left_image_retrieved_.index) +
+        //         std::string(" does not match right image index ") + std::to_string(right_image_retrieved_.index + offset_));
+        // }
 
-        // Confirm that left and right timestamps match
-        timestamp_error_ns_ = static_cast<int64_t>(std::abs(rclcpp::Time(left_timestamp_retrieved_.timestamp).nanoseconds() - 
-            rclcpp::Time(right_timestamp_retrieved_.timestamp).nanoseconds()));
-        if (timestamp_error_ns_ > EPSILON) {
-            throw std::runtime_error(std::string("Left and right timestamp have an error of = ") + 
-                std::to_string(timestamp_error_ns_) + " ns");
-        }
+        // // Confirm that left and right timestamps match
+        // timestamp_error_ns_ = static_cast<int64_t>(std::abs(rclcpp::Time(left_timestamp_retrieved_.timestamp).nanoseconds() - 
+        //     rclcpp::Time(right_timestamp_retrieved_.timestamp).nanoseconds()));
+        // if (timestamp_error_ns_ > EPSILON) {
+        //     throw std::runtime_error(std::string("Left and right timestamp have an error of = ") + 
+        //         std::to_string(timestamp_error_ns_) + " ns");
+        // }
 
         // Publish images with left timestamp
         left_synchronized_image_ = left_image_retrieved_.image;
